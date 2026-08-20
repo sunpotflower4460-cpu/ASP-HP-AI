@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { scoreCommercialIntent, classifyCommercialIntent } from './lib/commercial-intent.mjs';
 
 const readJson = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const gsc = readJson('data/search-console/latest.json');
@@ -56,14 +57,6 @@ for (const row of affiliatePaths) {
   revenueByPath.set(pagePath, current);
 }
 
-function intentScore({ searchClicks, affiliateClicks, confirmedYen, pendingYen }) {
-  const volume = Math.min(35, Math.log2(1 + Math.max(0, affiliateClicks)) * 8);
-  const outboundRate = searchClicks > 0 ? Math.min(1, affiliateClicks / searchClicks) : 0;
-  const efficiency = Math.min(25, outboundRate * 100);
-  const revenue = confirmedYen > 0 ? 40 : pendingYen > 0 ? 25 : 0;
-  return Math.round(Math.min(100, volume + efficiency + revenue));
-}
-
 const allSignalPaths = new Set([
   ...searchByPath.keys(),
   ...affiliateClicksByPath.keys(),
@@ -73,13 +66,17 @@ const commercialSignals = [...allSignalPaths].map((pagePath) => {
   const search = searchByPath.get(pagePath) || { clicks: 0, impressions: 0 };
   const revenue = revenueByPath.get(pagePath) || { confirmedYen: 0, pendingYen: 0, rejectedYen: 0 };
   const affiliateClicks = affiliateClicksByPath.get(pagePath) || 0;
-  const score = intentScore({
+  const score = scoreCommercialIntent({
     searchClicks: search.clicks,
     affiliateClicks,
     confirmedYen: revenue.confirmedYen,
     pendingYen: revenue.pendingYen
   });
-  const className = score >= 80 ? 'proven' : score >= 60 ? 'strong' : score >= 35 ? 'promising' : 'weak';
+  const className = classifyCommercialIntent({
+    score,
+    confirmedYen: revenue.confirmedYen,
+    pendingYen: revenue.pendingYen
+  });
   return {
     pagePath,
     page: normalizeUrl(pagePath),
