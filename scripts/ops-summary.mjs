@@ -11,6 +11,7 @@ const editorPlan = readJson('reports/editor-plan.json');
 const contentGapPlan = readJson('reports/content-gap-plan.json');
 const dailyRun = readJson('reports/daily-run.json');
 const gscObservation = readJson('data/search-console/latest.json');
+const remoteSmoke = readJson('reports/remote-smoke.json');
 
 const revenue = latest?.revenue || {};
 const signals = (latest?.commercialSignals || []).slice(0, 8);
@@ -23,6 +24,7 @@ const dailyStatus = dailyRun?.ok === true ? (dailyRun.degraded ? 'DEGRADED' : 'P
 const gscFreshness = latest?.sourceFreshness?.searchConsole || null;
 const gaFreshness = latest?.sourceFreshness?.analytics || null;
 const gscPaging = gscObservation?.pagination || null;
+const remoteSmokeStatus = remoteSmoke?.ok === true ? 'PASS' : remoteSmoke ? 'FAIL' : 'NOT RUN';
 
 const yen = (value) => value == null ? '-' : `¥${Number(value || 0).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}`;
 const pct = (value) => value == null ? '-' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -42,6 +44,7 @@ const lines = [
   `- Verification: **${verifyStatus}**`,
   `- Public-launch readiness: **${launchStatus}**`,
   `- PUBLIC_READY: **${verification?.publicReady === true ? 'true' : 'false'}**`,
+  `- Remote smoke: **${remoteSmokeStatus}**`,
   `- Search Console data: **${freshnessLabel(gscFreshness)}**`,
   `- GA4 data: **${freshnessLabel(gaFreshness)}**`,
   `- GSC rows/pages: **${Number(gscPaging?.totalRows ?? (gscObservation?.rows || []).length)} rows / ${gscPaging?.pagesFetched ?? '-'} page(s)**`,
@@ -50,6 +53,16 @@ const lines = [
   `- AI editing skipped because degraded observations: **${dailyRun?.aiEditingSkippedBecauseDegraded === true ? 'yes' : 'no'}**`,
   `- Editor candidates: **${(editorPlan?.candidates || []).length}**`,
   `- Content-gap review candidates: **${(contentGapPlan?.candidates || []).length}**`,
+  '',
+  '## Remote deployment',
+  '',
+  `- Public site URL: **${remoteSmoke?.site || 'not recorded'}**`,
+  `- Remote branch: **${remoteSmoke?.remoteBranch || 'not recorded'}**`,
+  `- Remote version: **${remoteSmoke?.remoteVersion || 'not recorded'}**`,
+  `- Remote commit SHA: **${remoteSmoke?.remoteCommitSha || 'not recorded'}**`,
+  `- Local HEAD: **${remoteSmoke?.localHead || 'not recorded'}**`,
+  `- Commit match required: **${remoteSmoke?.requireCommitMatch === true ? 'yes' : remoteSmoke ? 'no' : 'not recorded'}**`,
+  `- Failure reason: **${remoteSmoke?.failures?.length ? remoteSmoke.failures.join('; ').replace(/\|/g, '\\|') : remoteSmoke?.ok === true ? 'none' : 'not recorded'}**`,
   '',
   '## Revenue',
   '',
@@ -120,6 +133,8 @@ if (dailyRun?.failedStep) {
   lines.push('', '## Daily-run failure', '', `- Failed step: **${dailyRun.failedStep}**`);
 }
 
-fs.mkdirSync('reports', { recursive: true });
-fs.writeFileSync('reports/ops-summary.md', `${lines.join('\n')}\n`);
+fs.mkdirSync('reports', { recursive: true, mode: 0o700 });
+try { fs.chmodSync('reports', 0o700); } catch {}
+fs.writeFileSync('reports/ops-summary.md', `${lines.join('\n')}\n`, { mode: 0o600 });
+try { fs.chmodSync('reports/ops-summary.md', 0o600); } catch {}
 console.log('Wrote reports/ops-summary.md');

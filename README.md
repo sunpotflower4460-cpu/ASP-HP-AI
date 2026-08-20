@@ -69,6 +69,8 @@ remote smoke
 
 ## 開始
 
+本番公開までの順序と停止条件は [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) を正本として進めてください。
+
 ```bash
 npm install
 cp .env.local.example .env.local

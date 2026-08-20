@@ -42,8 +42,13 @@ for (const page of pages) {
     failures.push(`data/pages.json: ${page.id} lastReviewedAt cannot be in the future (${reviewed} > ${todayJst} JST)`);
   }
   const relative = page.path === '/' ? 'index' : page.path.replace(/^\//, '').replace(/\/$/, '');
-  const target = path.join(root, 'src/pages', `${relative}.astro`);
-  if (!fs.existsSync(target)) failures.push(`data/pages.json: ${page.id} points to missing ${path.relative(root,target)}`);
+  const routeTargets = [
+    path.join(root, 'src/pages', `${relative}.astro`),
+    path.join(root, 'src/pages', relative, 'index.astro')
+  ];
+  if (!routeTargets.some((target) => fs.existsSync(target))) {
+    failures.push(`data/pages.json: ${page.id} points to missing route (${routeTargets.map((target) => path.relative(root, target)).join(' or ')})`);
+  }
 }
 
 const requiredTrustPages = ['about.astro','disclosure.astro','privacy.astro','external-transmission.astro','contact.astro'];
