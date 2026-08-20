@@ -49,13 +49,19 @@ if (fs.lstatSync(manifestFile).isSymbolicLink()) throw new Error('Snapshot manif
 const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
 if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.files)) throw new Error('Unsupported or invalid backup manifest.');
 
-const allowedRoots = [
+const replaceEntireRoots = [
   'data/search-console',
   'data/analytics',
-  'data/affiliate',
   'data/ai-usage',
   'reports'
 ];
+const affiliateRoot = 'data/affiliate';
+
+function isAllowedRestorePath(relative) {
+  if (replaceEntireRoots.some((prefix) => relative === prefix || relative.startsWith(`${prefix}/`))) return true;
+  if (relative.startsWith(`${affiliateRoot}/`)) return relative.endsWith('.json');
+  return false;
+}
 
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -66,8 +72,7 @@ const verifiedEntries = [];
 // Verify the entire snapshot before deleting any current local data.
 for (const item of manifest.files) {
   const relative = String(item.path || '').replace(/\\/g, '/');
-  const allowed = allowedRoots.some((prefix) => relative === prefix || relative.startsWith(`${prefix}/`));
-  if (!allowed) throw new Error(`Manifest contains non-restorable path: ${relative}`);
+  if (!isAllowedRestorePath(relative)) throw new Error(`Manifest contains non-restorable path: ${relative}`);
   const sourceCandidate = path.resolve(snapshot, relative);
   if (!safeInside(snapshot, sourceCandidate)) throw new Error(`Unsafe manifest path: ${relative}`);
   if (!fs.existsSync(sourceCandidate)) throw new Error(`Backup file missing: ${relative}`);
@@ -81,9 +86,25 @@ for (const item of manifest.files) {
   verifiedEntries.push({ relative, source });
 }
 
-for (const relative of allowedRoots) {
+for (const relative of replaceEntireRoots) {
   fs.rmSync(path.join(root, relative), { recursive: true, force: true });
 }
+
+function removeAffiliateJson(dir, isRoot = true) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      removeAffiliateJson(full, false);
+      if (!fs.readdirSync(full).length) fs.rmSync(full, { recursive: true, force: true });
+    } else if (entry.isFile() && entry.name.endsWith('.json')) {
+      fs.rmSync(full, { force: true });
+    }
+  }
+  if (!isRoot && fs.existsSync(dir) && !fs.readdirSync(dir).length) fs.rmSync(dir, { recursive: true, force: true });
+}
+removeAffiliateJson(path.join(root, affiliateRoot));
 
 for (const { relative, source } of verifiedEntries) {
   const destination = path.resolve(root, relative);
@@ -93,7 +114,7 @@ for (const { relative, source } of verifiedEntries) {
   try { fs.chmodSync(destination, 0o600); } catch {}
 }
 
-for (const relative of allowedRoots) {
+for (const relative of [...replaceEntireRoots, affiliateRoot]) {
   const target = path.join(root, relative);
   if (fs.existsSync(target)) {
     try { fs.chmodSync(target, 0o700); } catch {}
