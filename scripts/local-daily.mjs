@@ -61,11 +61,8 @@ run('git', ['pull', '--ff-only', 'origin', targetBranch]);
 const a8Import = process.env.A8_AUTO_IMPORT_FILE?.trim();
 if (a8Import) {
   const resolved = path.isAbsolute(a8Import) ? a8Import : path.join(root, a8Import);
-  if (fs.existsSync(resolved)) {
-    run(npmCommand, ['run', 'a8:import', '--', resolved]);
-  } else {
-    console.warn(`A8_AUTO_IMPORT_FILE does not exist; continuing without A8 refresh: ${resolved}`);
-  }
+  if (fs.existsSync(resolved)) run(npmCommand, ['run', 'a8:import', '--', resolved]);
+  else console.warn(`A8_AUTO_IMPORT_FILE does not exist; continuing without A8 refresh: ${resolved}`);
 }
 
 run(npmCommand, ['run', 'daily']);
@@ -73,9 +70,27 @@ process.env.VERIFY_PRODUCTION = process.env.PUBLIC_READY === 'true' ? 'true' : '
 run(npmCommand, ['run', 'verify']);
 run(npmCommand, ['run', 'ops:summary']);
 
+// Operational observations are intentionally local-only because this repository is public.
+// If configured, snapshot them outside the repository before any public source is committed.
+if (process.env.LOCAL_BACKUP_DIR?.trim()) {
+  const backup = run(npmCommand, ['run', 'local:backup'], { allowFailure: true });
+  if (backup.status !== 0) {
+    const message = 'Private operational-data backup failed.';
+    if (process.env.LOCAL_BACKUP_REQUIRED === 'true') throw new Error(`${message} LOCAL_BACKUP_REQUIRED=true, so autonomous public-content commit is blocked.`);
+    console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
+  } else {
+    const backupVerify = run(npmCommand, ['run', 'local:backup:verify'], { allowFailure: true });
+    if (backupVerify.status !== 0) {
+      const message = 'Private backup integrity verification failed.';
+      if (process.env.LOCAL_BACKUP_REQUIRED === 'true') throw new Error(`${message} Autonomous public-content commit is blocked.`);
+      console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
+    }
+  }
+}
+
 // This repository is public. Search queries, analytics, ASP revenue, AI usage and
-// operations reports remain local-only via .gitignore. Only public site source
-// edits are eligible for autonomous commit/push.
+// operations reports remain local-only via .gitignore. Only public site source edits
+// are eligible for autonomous commit/push.
 const allowlistedPaths = ['src/pages'];
 for (const target of allowlistedPaths) {
   if (fs.existsSync(path.join(root, target))) run('git', ['add', '--', target]);
