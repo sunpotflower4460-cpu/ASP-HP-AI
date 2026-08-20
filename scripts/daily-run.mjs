@@ -61,7 +61,11 @@ run('Affiliate normalization', 'affiliate:normalize');
 run('Daily analysis', 'analyze');
 run('Editor planning', 'editor:plan');
 
-if (process.env.AI_EDITOR_ENABLED === 'true') {
+if (report.degraded) {
+  console.warn('Daily observations are degraded; AI editing is disabled for this run.');
+  removeStaleProposal();
+  report.aiEditingSkippedBecauseDegraded = true;
+} else if (process.env.AI_EDITOR_ENABLED === 'true') {
   const aiOk = run('Optional AI proposal', 'editor:ai', { optional: true });
   if (aiOk && fs.existsSync('reports/ai-editor-proposal.json')) {
     run('Optional safe title application', 'editor:apply', { optional: true });
@@ -75,4 +79,4 @@ if (process.env.AI_EDITOR_ENABLED === 'true') {
 
 report.ok = true;
 persist();
-console.log(`\nDaily run completed${report.degraded ? ' in degraded mode' : ''}.`);
+console.log(`\nDaily run completed${report.degraded ? ' in degraded observation mode' : ''}.`);
