@@ -20,20 +20,36 @@ try {
   first.release();
   assert.equal(fs.existsSync(lockPath), false, 'release should remove only its own lock');
 
+  const old = new Date(Date.now() - 10 * 3600000);
+  const liveOldPayload = {
+    schemaVersion: 1,
+    runId: 'live-old-lock',
+    pid: process.pid,
+    hostname: os.hostname(),
+    startedAt: old.toISOString()
+  };
+  fs.writeFileSync(lockPath, `${JSON.stringify(liveOldPayload)}\n`);
+  fs.utimesSync(lockPath, old, old);
+  assert.throws(
+    () => acquireRunLock({ lockPath, maxAgeHours: 6 }),
+    /still alive/,
+    'an old lock owned by a live same-host process must never be stolen'
+  );
+  fs.rmSync(lockPath, { force: true });
+
   const stalePayload = {
     schemaVersion: 1,
     runId: 'abandoned-test-lock',
     pid: 999999,
-    hostname: 'fixture',
-    startedAt: new Date(Date.now() - 10 * 3600000).toISOString()
+    hostname: os.hostname(),
+    startedAt: old.toISOString()
   };
   fs.writeFileSync(lockPath, `${JSON.stringify(stalePayload)}\n`);
-  const old = new Date(Date.now() - 10 * 3600000);
   fs.utimesSync(lockPath, old, old);
 
   const recovered = acquireRunLock({ lockPath, maxAgeHours: 6 });
   const recoveredPayload = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-  assert.notEqual(recoveredPayload.runId, 'abandoned-test-lock', 'stale lock must be replaced');
+  assert.notEqual(recoveredPayload.runId, 'abandoned-test-lock', 'stale dead-process lock must be replaced');
   recovered.release();
 
   assert.throws(
