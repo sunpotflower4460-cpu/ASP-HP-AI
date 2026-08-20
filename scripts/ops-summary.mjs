@@ -8,11 +8,13 @@ const latest = readJson('reports/latest.json');
 const readiness = readJson('reports/readiness.json');
 const verification = readJson('reports/verification.json');
 const editorPlan = readJson('reports/editor-plan.json');
+const contentGapPlan = readJson('reports/content-gap-plan.json');
 const dailyRun = readJson('reports/daily-run.json');
 
 const revenue = latest?.revenue || {};
 const signals = (latest?.commercialSignals || []).slice(0, 8);
 const actions = (latest?.nextActions || []).slice(0, 8);
+const gapCandidates = (contentGapPlan?.candidates || []).slice(0, 8);
 const readinessFailures = (readiness?.checks || []).filter((x) => x.level === 'required' && !x.ok);
 const verifyStatus = verification?.ok === true ? 'PASS' : verification ? 'FAIL' : 'NOT RUN';
 const launchStatus = readiness?.readyForPublicLaunch ? 'READY' : 'NOT READY';
@@ -42,6 +44,7 @@ const lines = [
   `- GA4 data: **${freshnessLabel(gaFreshness)}**`,
   `- AI editing skipped because degraded observations: **${dailyRun?.aiEditingSkippedBecauseDegraded === true ? 'yes' : 'no'}**`,
   `- Editor candidates: **${(editorPlan?.candidates || []).length}**`,
+  `- Content-gap review candidates: **${(contentGapPlan?.candidates || []).length}**`,
   '',
   '## Revenue',
   '',
@@ -65,6 +68,18 @@ if (signals.length) {
   lines.push('_No commercial signal data yet._');
 }
 
+lines.push('', '## Search intent / content-gap review', '');
+if (gapCandidates.length) {
+  lines.push('| Type | Query | Impressions | Clicks | CTR | Position | Auto-create |');
+  lines.push('|---|---|---:|---:|---:|---:|---|');
+  for (const row of gapCandidates) {
+    lines.push(`| ${row.type || '-'} | ${String(row.query || '-').replace(/\|/g, '\\|')} | ${Number(row.impressions || 0)} | ${Number(row.clicks || 0)} | ${pct(row.ctr)} | ${Number(row.position || 0).toFixed(1)} | ${row.autoCreateAllowed === true ? 'yes' : 'no'} |`);
+  }
+  lines.push('', '_NEW_PAGE_REVIEW is proposal-only. The system never auto-creates pages from Search Console queries._');
+} else {
+  lines.push('_No content-gap candidates yet._');
+}
+
 lines.push('', '## Next actions', '');
 if (actions.length) {
   for (const action of actions) lines.push(`- **${action.type}** — ${action.target || '-'}${action.reason ? ` — ${action.reason}` : ''}`);
@@ -79,7 +94,7 @@ if (degradedSteps.length) {
 }
 if ((gscFreshness && !gscFreshness.fresh) || (gaFreshness && !gaFreshness.fresh)) {
   lines.push('', '## Stale observation guard', '');
-  if (gscFreshness && !gscFreshness.fresh) lines.push('- Search Console is stale: SEO edit opportunities are suppressed until fresh data is fetched.');
+  if (gscFreshness && !gscFreshness.fresh) lines.push('- Search Console is stale: SEO edit opportunities and content-gap proposals are suppressed until fresh data is fetched.');
   if (gaFreshness && !gaFreshness.fresh) lines.push('- GA4 is stale: outbound-click gap/amplification decisions are suppressed until fresh data is fetched.');
 }
 
