@@ -45,19 +45,57 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function capture(command, args) {
-  const result = run(command, args, { capture: true });
-  return String(result.stdout || '').trim();
+function capture(command, args, { allowFailure = false } = {}) {
+  const result = run(command, args, { capture: true, allowFailure });
+  return { status: result.status ?? 1, stdout: String(result.stdout || '').trim(), stderr: String(result.stderr || '').trim() };
 }
 
-const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+function stable(value) {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function strippedPauseFields(value) {
+  const clone = JSON.parse(JSON.stringify(value));
+  delete clone.status;
+  delete clone.pausedAt;
+  delete clone.pauseReason;
+  return clone;
+}
+
+function isSafeAutomatedOfferPause(file) {
+  if (!/^data\/offers\/[^/]+\.json$/.test(file)) return false;
+  const previous = capture('git', ['show', `HEAD:${file}`], { allowFailure: true });
+  if (previous.status !== 0) return false;
+  const currentPath = path.join(root, file);
+  if (!fs.existsSync(currentPath)) return false;
+  try {
+    const before = JSON.parse(previous.stdout);
+    const after = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
+    if (before.status !== 'active' || after.status !== 'paused') return false;
+    if (!String(after.pauseReason || '').startsWith('auto safety pause:')) return false;
+    if (!Number.isFinite(Date.parse(after.pausedAt || ''))) return false;
+    return stable(strippedPauseFields(before)) === stable(strippedPauseFields(after));
+  } catch {
+    return false;
+  }
+}
+
+const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']).stdout;
 if (branch !== targetBranch) throw new Error(`Local automation only runs on '${targetBranch}', current branch is '${branch}'.`);
 
-const dirty = capture('git', ['status', '--porcelain']);
+const dirty = capture('git', ['status', '--porcelain']).stdout;
 if (dirty) throw new Error('Working tree is not clean. Local automation will not overwrite human changes.');
 
 run('git', ['pull', '--ff-only', 'origin', targetBranch]);
 run(npmCommand, ['run', 'local:doctor']);
+
+// Safety scan may only move an existing active offer to paused. It never edits
+// facts, URLs, tags or activates anything.
+run(npmCommand, ['run', 'offer:safety-scan']);
 
 const a8Import = process.env.A8_AUTO_IMPORT_FILE?.trim();
 if (a8Import) {
@@ -95,39 +133,48 @@ if (backupDir) {
 }
 
 // This repository is public. Search queries, analytics, ASP revenue, AI usage and
-// operations reports remain local-only via .gitignore. Only public site source edits
-// are eligible for autonomous commit/push.
-const allowlistedPaths = ['src/pages'];
-const trackedChanged = capture('git', ['diff', '--name-only']);
-const unexpectedTracked = trackedChanged
-  .split(/\r?\n/)
-  .filter(Boolean)
-  .filter((file) => !allowlistedPaths.some((prefix) => file === prefix || file.startsWith(`${prefix}/`)));
+// operations reports remain local-only. Autonomous commits may contain only:
+// 1) public page edits, and 2) semantically verified active -> paused safety changes.
+const publicPagePrefix = 'src/pages';
+const trackedChanged = capture('git', ['diff', '--name-only']).stdout.split(/\r?\n/).filter(Boolean);
+const safeOfferFiles = [];
+const unexpectedTracked = [];
+for (const file of trackedChanged) {
+  if (file === publicPagePrefix || file.startsWith(`${publicPagePrefix}/`)) continue;
+  if (isSafeAutomatedOfferPause(file)) {
+    safeOfferFiles.push(file);
+    continue;
+  }
+  unexpectedTracked.push(file);
+}
 if (unexpectedTracked.length) {
-  throw new Error(`Refusing autonomous commit because tracked files outside the public-content allowlist changed:\n${unexpectedTracked.join('\n')}`);
+  throw new Error(`Refusing autonomous commit because tracked files changed outside the allowed page/safety-pause rules:\n${unexpectedTracked.join('\n')}`);
 }
 
-for (const target of allowlistedPaths) {
-  if (fs.existsSync(path.join(root, target))) run('git', ['add', '--', target]);
-}
+if (fs.existsSync(path.join(root, publicPagePrefix))) run('git', ['add', '--', publicPagePrefix]);
+for (const file of safeOfferFiles) run('git', ['add', '--', file]);
 
-const staged = capture('git', ['diff', '--cached', '--name-only']);
+const staged = capture('git', ['diff', '--cached', '--name-only']).stdout;
 if (!staged) {
-  console.log('No public site changes to commit. Operational observations remain local-only.');
+  console.log('No public page or safe offer-pause changes to commit. Operational observations remain local-only.');
   process.exit(0);
 }
 
-const allowed = staged.split(/\r?\n/).filter(Boolean).every((file) =>
-  allowlistedPaths.some((prefix) => file === prefix || file.startsWith(`${prefix}/`))
-);
-if (!allowed) throw new Error(`Refusing commit because staged files escaped public-content allowlist:\n${staged}`);
+const stagedFiles = staged.split(/\r?\n/).filter(Boolean);
+for (const file of stagedFiles) {
+  const isPage = file === publicPagePrefix || file.startsWith(`${publicPagePrefix}/`);
+  const isSafePause = safeOfferFiles.includes(file) && isSafeAutomatedOfferPause(file);
+  if (!isPage && !isSafePause) {
+    throw new Error(`Refusing commit because staged file escaped autonomous rules: ${file}`);
+  }
+}
 
 const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
-run('git', ['commit', '-m', `chore: autonomous site update ${date}`]);
+run('git', ['commit', '-m', `chore: autonomous safety/content update ${date}`]);
 
 if (autoPush) {
   run('git', ['push', 'origin', targetBranch]);
-  console.log('Autonomous public-content update pushed. Cloudflare Pages Git integration will run the deployment gate.');
+  console.log('Autonomous safe update pushed. Cloudflare Pages Git integration will run the deployment gate.');
 } else {
-  console.log('Autonomous public-content update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
+  console.log('Autonomous safe update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
 }
