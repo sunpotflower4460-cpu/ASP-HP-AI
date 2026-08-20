@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -34,7 +34,7 @@
     "editor:plan": "node scripts/editor-plan.mjs",
     "editor:ai": "node scripts/editor-ai.mjs",
     "editor:apply": "node scripts/apply-title-proposal.mjs",
-    "daily": "npm run gsc:fetch && npm run ga:fetch && npm run vc:fetch && npm run affiliate:normalize && npm run analyze && npm run editor:plan && npm run editor:ai && npm run editor:apply"
+    "daily": "node scripts/daily-run.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.3",
