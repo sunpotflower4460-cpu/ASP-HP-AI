@@ -17,6 +17,8 @@ verify（公開中はstrict）
 ↓
 ops-summary生成
 ↓
+ローカル専用データを任意バックアップ＋整合性確認
+↓
 公開サイトのsrc/pages変更だけcommit
 ↓
 push（明示ON時のみ）
@@ -61,6 +63,7 @@ src/pages/**
 - 必須のローカル処理に失敗
 - verifyに失敗
 - staged fileが公開コンテンツallowlist外へ出た
+- `LOCAL_BACKUP_REQUIRED=true`でバックアップまたは整合性確認に失敗
 
 外部API取得だけが失敗した場合はdegraded observation modeとして分析記録を継続できますが、その日はAI編集を行いません。
 
@@ -212,9 +215,45 @@ reports/ops-summary.md
 
 をまとめます。**このファイルもローカル専用です。** CI画面の代わりにまずこれを確認します。
 
-## 8. ローカルデータのバックアップ
+## 8. ローカル専用データのバックアップ（任意）
 
-検索・収益データはGitHubへ置かないため、必要なら別のローカルディレクトリへ自動バックアップできます。詳細は`.env.local.example`の`LOCAL_DATA_BACKUP_DIR`を参照してください。
+GitHubへ置かない検索・収益データを、Gitリポジトリ外のディレクトリへ世代バックアップできます。
+
+`.env.local`:
+
+```text
+LOCAL_BACKUP_DIR=/Users/you/Documents/ASP-HP-AI-private-backups
+LOCAL_BACKUP_RETENTION_DAYS=30
+LOCAL_BACKUP_REQUIRED=false
+```
+
+手動実行:
+
+```bash
+npm run local:backup
+npm run local:backup:verify
+```
+
+バックアップ対象:
+
+- Search Console取得結果
+- GA4取得結果
+- A8/ValueCommerceのローカル成果JSONと正規化データ
+- AI使用量
+- 運用レポート
+
+バックアップしないもの:
+
+- `.env.local`
+- private key / API token
+- raw A8 CSV (`imports/`)
+- Git履歴
+- launchdログ
+- サイトソース
+
+各snapshotへSHA-256付き`manifest.json`を生成し、`latest.json`が最新snapshotを示します。`LOCAL_BACKUP_RETENTION_DAYS`を超えた、このスクリプトが作成したtimestamp形式snapshotだけ削除します。
+
+`LOCAL_BACKUP_REQUIRED=true`にすると、バックアップまたはSHA-256整合性確認に失敗した日は、AIが作った公開ページ変更をcommitする前に日次botを停止します。
 
 ## 9. 運用中にエラーになったら
 
@@ -226,6 +265,7 @@ botは失敗時に無理にcommit/pushしません。
 git status
 npm run verify
 npm run ops:summary
+npm run local:backup:verify
 ```
 
 `reports/ops-summary.md`と`reports/daily-run.json`を見て、必要なら修正して再開します。
@@ -239,7 +279,7 @@ launchd
 local-daily.mjs
 = 非公開データ取得・分析・安全な公開ページ変更・verify
 
-ローカルデータ
+ローカルデータ / private backup
 = GitHubへ送らない
 
 Cloudflare Pages Git integration
