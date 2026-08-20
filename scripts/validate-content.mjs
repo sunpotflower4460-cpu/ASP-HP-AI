@@ -8,6 +8,7 @@ const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
 const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
+const allowedDecisionTags = new Set(['fiber','home-router','mobile','short-stay','work','gaming','no-construction']);
 
 const seenPageIds = new Set();
 const seenPagePaths = new Set();
@@ -33,6 +34,8 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
   if (!offer.id || !offer.name || !offer.asp || !offer.status) failures.push(`${file}: required offer fields missing`);
   if (seenOfferIds.has(offer.id)) failures.push(`${file}: duplicate offer id '${offer.id}'`);
   seenOfferIds.add(offer.id);
+  if (!Array.isArray(offer.decisionTags || [])) failures.push(`${file}: decisionTags must be an array`);
+  for (const tag of offer.decisionTags || []) if (!allowedDecisionTags.has(tag)) failures.push(`${file}: unknown decisionTag '${tag}'`);
   if (offer.status === 'active') {
     if (!offer.affiliateUrl) failures.push(`${file}: active offer requires affiliateUrl`);
     if (!offer.officialUrl) failures.push(`${file}: active offer requires officialUrl`);

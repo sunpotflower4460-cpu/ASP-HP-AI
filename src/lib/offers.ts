@@ -8,6 +8,7 @@ export type Offer = {
   officialUrl?: string;
   rewardYen?: number | null;
   allowedMedia?: string[];
+  decisionTags?: string[];
   facts?: Record<string, {
     value: unknown;
     source: string;

@@ -8,6 +8,7 @@
   "officialUrl": "https://example.com",
   "rewardYen": null,
   "allowedMedia": ["web"],
+  "decisionTags": [],
   "facts": {
     "summary": {
       "value": "実案件登録時に公式情報へ置き換えてください",

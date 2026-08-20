@@ -3,30 +3,57 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import GuideNav from '../../components/GuideNav.astro';
 import AffiliateCTA from '../../components/AffiliateCTA.astro';
 import { getActiveOffers } from '../../lib/offers';
+import type { Offer } from '../../lib/offers';
 
 const activeOffers = getActiveOffers();
+const checkedAt = (offer: Offer) => {
+  const dates = Object.values(offer.facts || {}).map((fact) => fact.checkedAt).filter(Boolean).sort();
+  return dates.at(-1) || null;
+};
 ---
-<BaseLayout title="ネット環境を比較するときの基準" description="一人暮らし・賃貸でネット環境を比較するときに、月額以外で確認したい条件を整理します。">
+<BaseLayout title="ネット環境を条件から比較する" description="賃貸・一人暮らしのネット環境を、工事可否・用途・居住期間・総額の条件から整理し、確認済みの提携サービスだけを比較します。">
   <article class="card">
-    <h1>ネット環境を比較するときの基準</h1>
-    <p>「一番安い」だけで決めず、生活条件に合うかを先に確認すると候補を絞りやすくなります。</p>
-    <h2>住居</h2><p>回線設備、工事可否、管理会社や大家への確認が必要かを見ます。</p>
-    <h2>用途</h2><p>在宅勤務、ゲーム、動画視聴など、普段の使い方に必要な条件を整理します。</p>
-    <h2>期間</h2><p>入居期間と、開通までの時間・解約時の条件を合わせて確認します。</p>
-    <h2>総額</h2><p>月額だけでなく初期費用や機器、工事、解約時に発生しうる費用も比較対象にします。</p>
-    <h2>サポートと手続き</h2><p>申込みから利用開始までに必要な手続きや、困ったときの問い合わせ方法も確認します。</p>
+    <h1>ネット環境を条件から比較する</h1>
+    <p>ここでは「人気順」や根拠のないランキングではなく、<strong>自分の生活条件に合わない候補を先に外す</strong>方法で比較します。</p>
+    <h2>比較する順番</h2>
+    <ol>
+      <li><strong>住居</strong>：固定回線の設備、工事可否、管理会社への確認。</li>
+      <li><strong>用途</strong>：在宅勤務、ゲーム、動画など日常で負荷が高い使い方。</li>
+      <li><strong>期間</strong>：長期か短期か、引っ越し予定があるか。</li>
+      <li><strong>総額</strong>：開始・毎月・端末・終了時まで同じ利用期間で計算。</li>
+      <li><strong>公式条件</strong>：最後は提供エリア・料金・契約条件を公式情報で確認。</li>
+    </ol>
+    <p><a href="/diagnosis/">まだ方向性が決まっていない場合は3問診断から →</a></p>
   </article>
 
   <section class="card">
+    <h2>条件で候補を絞る</h2>
+    <p>案件ごとに公式情報と照合して登録したタグだけを使います。タグが未確認の案件をAIが推測して分類することはありません。</p>
+    <div class="filter-row" aria-label="比較条件">
+      <button class="filter-chip" data-focus="all">すべて</button>
+      <button class="filter-chip" data-focus="fiber">固定回線を検討</button>
+      <button class="filter-chip" data-focus="home-router">工事不要を検討</button>
+      <button class="filter-chip" data-focus="short-stay">短期居住</button>
+      <button class="filter-chip" data-focus="work">在宅勤務</button>
+      <button class="filter-chip" data-focus="gaming">ゲーム</button>
+    </div>
+    <p id="filter-status" class="muted" aria-live="polite"></p>
+  </section>
+
+  <section class="card">
     <h2>現在確認できる提携サービス</h2>
-    <p>順位付けではなく、当サイトで事実情報と提携条件を確認済みの案件だけを表示します。申込み前には必ず遷移先の公式情報で最新条件をご確認ください。</p>
+    <p>当サイトで事実情報・情報源・確認日・Web掲載可否を登録済みで、現在activeになっている案件だけを表示します。申込み前には必ず遷移先の公式情報で最新条件をご確認ください。</p>
     {activeOffers.length ? (
-      <div class="offer-list">
+      <div class="offer-list" id="offer-list">
         {activeOffers.map((offer, index) => (
-          <article class="offer-card">
+          <article class="offer-card" data-offer-card data-tags={(offer.decisionTags || []).join(',')}>
             <h3>{offer.name}</h3>
             {typeof offer.facts?.summary?.value === 'string' && <p>{offer.facts.summary.value}</p>}
-            <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} />
+            {(offer.decisionTags || []).length > 0 && (
+              <p class="tag-list" aria-label="確認済み条件">{offer.decisionTags!.map((tag) => <span class="tag">{tag}</span>)}</p>
+            )}
+            {checkedAt(offer) && <p class="muted">情報確認日: {checkedAt(offer)}</p>}
+            <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} label="公式サイトで条件を確認" />
           </article>
         ))}
       </div>
@@ -35,4 +62,30 @@ const activeOffers = getActiveOffers();
     )}
   </section>
   <GuideNav />
+
+  <script is:inline>
+    const allowed = new Set(['all','fiber','home-router','short-stay','work','gaming']);
+    const params = new URLSearchParams(location.search);
+    let focus = allowed.has(params.get('focus')) ? params.get('focus') : 'all';
+    const cards = [...document.querySelectorAll('[data-offer-card]')];
+    const buttons = [...document.querySelectorAll('[data-focus]')];
+    const status = document.querySelector('#filter-status');
+    function applyFilter(nextFocus) {
+      focus = allowed.has(nextFocus) ? nextFocus : 'all';
+      let visible = 0;
+      for (const card of cards) {
+        const tags = new Set((card.dataset.tags || '').split(',').filter(Boolean));
+        const show = focus === 'all' || tags.has(focus);
+        card.hidden = !show;
+        if (show) visible++;
+      }
+      for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.focus === focus));
+      if (status) status.textContent = cards.length ? `${visible}件の確認済み候補を表示しています。` : '';
+      const url = new URL(location.href);
+      if (focus === 'all') url.searchParams.delete('focus'); else url.searchParams.set('focus', focus);
+      history.replaceState(null, '', url);
+    }
+    for (const button of buttons) button.addEventListener('click', () => applyFilter(button.dataset.focus));
+    applyFilter(focus);
+  </script>
 </BaseLayout>
