@@ -2,6 +2,15 @@ name: deploy-pages
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'data/offers/**'
+      - 'data/site.json'
+      - 'data/pages.json'
+      - 'astro.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 permissions:
   contents: read
