@@ -48,14 +48,24 @@ const autoPush = process.env.LOCAL_AUTO_PUSH === 'true';
 check('automation-enabled', automationEnabled, 'warning', 'LOCAL_AUTOMATION_ENABLED=true');
 check('auto-push-safety', !autoPush || automationEnabled, 'required', 'LOCAL_AUTO_PUSH=true requires LOCAL_AUTOMATION_ENABLED=true');
 
+const runLockMaxAge = Number(process.env.LOCAL_RUN_LOCK_MAX_AGE_HOURS || 6);
+check('run-lock-max-age', Number.isFinite(runLockMaxAge) && runLockMaxAge > 0 && runLockMaxAge <= 168, 'required', 'LOCAL_RUN_LOCK_MAX_AGE_HOURS must be > 0 and <= 168');
+
 const siteUrl = String(process.env.SITE_URL || '').trim();
 const publicReady = process.env.PUBLIC_READY === 'true';
 check('public-site-url', !publicReady || isSafeSiteBaseUrl(siteUrl), 'required', 'PUBLIC_READY=true requires a real HTTPS origin SITE_URL with no subpath/query/hash/credentials/placeholders/local hosts');
+
+const remoteSiteUrl = String(process.env.REMOTE_SITE_URL || '').trim();
+check('remote-site-url', !remoteSiteUrl || isSafeSiteBaseUrl(remoteSiteUrl), 'required', 'REMOTE_SITE_URL is empty or a safe HTTPS origin');
+const remoteTimeout = Number(process.env.REMOTE_SMOKE_TIMEOUT_MS || 10000);
+check('remote-smoke-timeout', Number.isFinite(remoteTimeout) && remoteTimeout >= 1000 && remoteTimeout <= 60000, 'required', 'REMOTE_SMOKE_TIMEOUT_MS must be between 1000 and 60000');
 
 const gscValues = [process.env.GSC_CLIENT_EMAIL, process.env.GSC_PRIVATE_KEY, process.env.GSC_SITE_URL].map((value) => String(value || '').trim());
 const gscAny = gscValues.some(Boolean);
 const gscComplete = gscValues.every(Boolean);
 check('gsc-configuration', !gscAny || gscComplete, 'required', 'Search Console credentials are either complete or entirely unset');
+const gscMaxPages = Number(process.env.GSC_MAX_PAGES || 4);
+check('gsc-max-pages', Number.isInteger(gscMaxPages) && gscMaxPages >= 1 && gscMaxPages <= 20, 'required', 'GSC_MAX_PAGES must be an integer from 1 to 20');
 
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 check('ga-measurement-id', !gaMeasurementId || /^G-[A-Z0-9]+$/i.test(gaMeasurementId), 'required', 'PUBLIC_GA_MEASUREMENT_ID is empty or matches G-XXXXXXXXXX');
