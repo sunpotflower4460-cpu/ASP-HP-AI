@@ -51,7 +51,8 @@ for (const action of report.nextActions || []) {
       clicks: opportunity.clicks,
       impressions: opportunity.impressions,
       ctr: opportunity.ctr,
-      position: opportunity.position
+      position: opportunity.position,
+      affiliateClicks: Number(opportunity.affiliateClicks || 0)
     }
   });
 }
