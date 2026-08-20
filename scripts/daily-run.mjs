@@ -59,6 +59,7 @@ run('ValueCommerce fetch', 'vc:fetch', { optional: true });
 // Local deterministic processing is required.
 run('Affiliate normalization', 'affiliate:normalize');
 run('Daily analysis', 'analyze');
+run('Content gap planning', 'gap:plan');
 run('Editor planning', 'editor:plan');
 
 if (report.degraded) {
