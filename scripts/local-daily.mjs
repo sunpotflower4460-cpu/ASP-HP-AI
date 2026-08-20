@@ -132,9 +132,31 @@ if (backupDir) {
   }
 }
 
+// No autonomous script is allowed to create untracked repository files. Local
+// operational outputs belong under ignored paths and therefore do not appear here.
+const unexpectedUntracked = capture('git', ['ls-files', '--others', '--exclude-standard']).stdout
+  .split(/\r?\n/)
+  .filter(Boolean);
+if (unexpectedUntracked.length) {
+  throw new Error(`Refusing autonomous commit because unexpected untracked files were created:\n${unexpectedUntracked.join('\n')}`);
+}
+
+// Page automation is modification-only. New pages, deletions, renames and copies
+// require human review even when they live under src/pages.
+const pageChanges = capture('git', ['diff', '--name-status', '--', 'src/pages']).stdout
+  .split(/\r?\n/)
+  .filter(Boolean);
+const unsafePageChanges = pageChanges.filter((line) => {
+  const status = line.split(/\s+/)[0] || '';
+  return status !== 'M';
+});
+if (unsafePageChanges.length) {
+  throw new Error(`Refusing autonomous commit because page changes were not modification-only:\n${unsafePageChanges.join('\n')}`);
+}
+
 // This repository is public. Search queries, analytics, ASP revenue, AI usage and
 // operations reports remain local-only. Autonomous commits may contain only:
-// 1) public page edits, and 2) semantically verified active -> paused safety changes.
+// 1) existing public page modifications, and 2) semantically verified active -> paused safety changes.
 const publicPagePrefix = 'src/pages';
 const trackedChanged = capture('git', ['diff', '--name-only']).stdout.split(/\r?\n/).filter(Boolean);
 const safeOfferFiles = [];
