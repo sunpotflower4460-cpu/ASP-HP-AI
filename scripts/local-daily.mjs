@@ -74,6 +74,7 @@ run(npmCommand, ['run', 'verify']);
 
 const allowlistedPaths = [
   'data/search-console/latest.json',
+  'data/analytics/latest.json',
   'data/affiliate/a8-latest.json',
   'data/affiliate/valuecommerce-latest.json',
   'data/affiliate/normalized-latest.json',
