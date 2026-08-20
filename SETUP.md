@@ -25,29 +25,23 @@ Cloudflare PagesをこのGitHubリポジトリへ直接接続します。V1の�
 - Build output directory: `dist`
 - Root directory: repository root
 
-Preview環境では必ず:
-
-- `PUBLIC_READY=false`
-
-Production環境も最初は `PUBLIC_READY=false` のままPages URL/独自ドメインで目視確認します。本公開時だけ `PUBLIC_READY=true` にします。
+Preview環境では必ず `PUBLIC_READY=false` にします。
+Production環境も最初は `PUBLIC_READY=false` のまま目視確認し、本公開時だけ `PUBLIC_READY=true` にします。
 
 Cloudflareのbuild commandが失敗するとそのデプロイは公開されません。`cloudflare:build` は本番時にstrict readinessまで含めて検証します。
 
 詳細は [NO_CI.md](./NO_CI.md) を参照してください。
 
 ### 公開commit確認
-デプロイ後:
-
 ```text
 https://your-domain.example/health.json
 ```
-
 でbranch/commit/publicReadyを確認できます。
 
 ## 3. Search Console
-Google Search Consoleでサイト所有権を人間が確認します。その後、Search Analyticsの読み取りとSitemap送信に使うサービスアカウントを対象プロパティへ追加します。
+Google Search Consoleでサイト所有権を人間が確認します。その後、Search Analytics読み取りとSitemap送信に使うサービスアカウントを対象プロパティへ追加します。
 
-必要な秘密情報:
+必要情報:
 
 - `GSC_CLIENT_EMAIL`
 - `GSC_PRIVATE_KEY`
@@ -58,6 +52,8 @@ Google Search Consoleでサイト所有権を人間が確認します。その�
 npm run gsc:fetch
 PUBLIC_READY=true SITE_URL=https://your-domain.example npm run gsc:submit
 ```
+
+GitHub Actionsを使わない場合、Sitemap送信は初回公開後に上記コマンドを1回実行すれば構いません。以後は同じsitemap URLをGoogleが再取得できます。
 
 ## 4. A8.net
 A8でWebサイトを登録し、案件との提携を行います。案件ごとに成果条件・禁止事項・Web掲載可否を確認します。
@@ -70,7 +66,7 @@ npm run offer:check -- offer-id
 npm run offer:activate -- offer-id --confirm-rules-reviewed
 ```
 
-A8成果は公式レポートCSVを取り込みます。
+A8成果は公式CSVを取り込みます。日次botでは `A8_AUTO_IMPORT_FILE` を設定すると、指定CSVを自動取り込みできます。
 
 ## 5. ValueCommerce（使う場合）
 管理画面からレポートAPI認証キーを発行します。
@@ -96,8 +92,6 @@ ValueCommerce案件にはProgram IDも登録します。
 収益ページと、提案後に元ソースが変化したページは自動変更から保護されます。
 
 ## 7. 公開直前
-まずローカルで:
-
 ```bash
 PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
 ```
@@ -106,5 +100,37 @@ Cloudflare Pagesでも同じ品質ゲートを `npm run cloudflare:build` が実
 
 実サイトを確認し、広告表示・プライバシー・外部送信・問い合わせ導線を目視してから `PUBLIC_READY=true` にします。
 
-## 8. 日次自動運転
-GitHub Actionsを前提にしないため、V1ではローカルschedulerで `npm run daily` → `npm run verify` → 安全な変更だけcommit/pushする経路を用意します。設定は [NO_CI.md](./NO_CI.md) と今後のlocal scheduler手順を参照してください。
+## 8. 日次自動運転（CI不要）
+
+```bash
+cp .env.local.example .env.local
+```
+
+最初は:
+
+```text
+LOCAL_AUTOMATION_ENABLED=true
+LOCAL_AUTO_PUSH=false
+```
+
+にして手動確認:
+
+```bash
+npm run local:daily
+```
+
+問題なければ `LOCAL_AUTO_PUSH=true` に変更します。
+
+macOSへ毎日登録:
+
+```bash
+npm run local:install
+```
+
+解除:
+
+```bash
+npm run local:uninstall
+```
+
+詳細は [LOCAL_AUTOMATION.md](./LOCAL_AUTOMATION.md) を参照してください。

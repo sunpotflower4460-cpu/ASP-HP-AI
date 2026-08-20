@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,9 @@
     "verify:prod": "VERIFY_PRODUCTION=true node scripts/verify.mjs",
     "cloudflare:build": "node scripts/cloudflare-build.mjs",
     "preview": "astro preview",
+    "local:daily": "node scripts/local-daily.mjs",
+    "local:install": "node scripts/install-launchd.mjs",
+    "local:uninstall": "node scripts/uninstall-launchd.mjs",
     "offer:new": "node scripts/create-offer.mjs",
     "offer:check": "node scripts/offer-readiness.mjs",
     "offer:activate": "node scripts/activate-offer.mjs",

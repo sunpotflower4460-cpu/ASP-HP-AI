@@ -12,9 +12,9 @@
 - `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
 - 案件はAIが勝手にactive化しない
-- GitHub Actions/CIがなくても検証・公開できる
+- GitHub Actions/CIがなくても検証・公開・日次運転できる
 
-本番設定は [SETUP.md](./SETUP.md)、CIなし運用は [NO_CI.md](./NO_CI.md)、実案件登録は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
+本番設定は [SETUP.md](./SETUP.md)、CIなし公開は [NO_CI.md](./NO_CI.md)、日次自動運転は [LOCAL_AUTOMATION.md](./LOCAL_AUTOMATION.md)、実案件登録は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
 
 ## 開始
 ```bash
@@ -45,6 +45,25 @@ Cloudflare PagesをGitHubへ直接接続します。
 
 build gateが失敗した場合はCloudflare側で公開されません。デプロイ後は `/health.json` で実際に公開されたbranch/commitを確認できます。
 
+## CIなしの日次自動運転
+最初は手動で安全確認:
+```bash
+cp .env.local.example .env.local
+npm run local:daily
+```
+
+macOSで毎日自動実行:
+```bash
+npm run local:install
+```
+
+解除:
+```bash
+npm run local:uninstall
+```
+
+botはmain以外、dirty working tree、verify失敗時にはpushしません。`LOCAL_AUTO_PUSH=true` は一度手動運転を確認した後だけ有効化します。
+
 ## 実案件を登録
 ```bash
 npm run offer:new -- --id my-offer --name "サービス名" --asp a8 --affiliate-url "https://..." --official-url "https://..." --summary "公式情報で確認した説明" --tags "home-router"
@@ -66,7 +85,7 @@ npm run a8:import -- /path/to/a8-report.csv
 npm run affiliate:normalize
 npm run analyze
 ```
-既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。
+既定はShift_JISです。`.env.local` の `A8_AUTO_IMPORT_FILE` を設定すると、所定のCSVを日次運転時に自動取り込みできます。
 
 ## ValueCommerce成果自動取得
 ```bash
@@ -99,12 +118,6 @@ npm run editor:ai
 
 `EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったタイトル変更を自動適用します。確定収益ページや、提案後にソースが変化したページは保護します。
 
-## 日次パイプライン
-```bash
-npm run daily
-```
-GitHub Actionsは補助扱いです。CIなしの日次自動運転はローカルschedulerを使う構成へ移行します。
-
 ## 安全思想
 - AIが外部情報を勝手に事実として追加しない
 - active案件の事実が期限切れならbuild停止
@@ -114,3 +127,4 @@ GitHub Actionsは補助扱いです。CIなしの日次自動運転はローカ�
 - 自動編集はSearch Console実データがあるページだけ
 - 確定収益ページを自動変更より優先保護
 - 案件分類タグは中央レジストリの確認済み値だけ
+- ローカルbotはallowlist外ファイルを自動commitしない
