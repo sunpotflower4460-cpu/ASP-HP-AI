@@ -22,7 +22,7 @@ const dailyStatus = dailyRun?.ok === true ? (dailyRun.degraded ? 'DEGRADED' : 'P
 const gscFreshness = latest?.sourceFreshness?.searchConsole || null;
 const gaFreshness = latest?.sourceFreshness?.analytics || null;
 
-const yen = (value) => `¥${Number(value || 0).toLocaleString('ja-JP')}`;
+const yen = (value) => value == null ? '-' : `¥${Number(value || 0).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}`;
 const pct = (value) => value == null ? '-' : `${(Number(value) * 100).toFixed(1)}%`;
 const freshnessLabel = (value) => {
   if (!value) return 'unknown';
@@ -59,10 +59,10 @@ const lines = [
 ];
 
 if (signals.length) {
-  lines.push('| Page | Intent | Class | Search clicks | Affiliate clicks | Outbound/Search | Confirmed | Pending |');
-  lines.push('|---|---:|---|---:|---:|---:|---:|---:|');
+  lines.push('| Page | Intent | Class | Search clicks | Affiliate clicks | Outbound/Search | Confirmed | ¥/Search click | ¥/Affiliate click | Pending |');
+  lines.push('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|');
   for (const row of signals) {
-    lines.push(`| ${row.pagePath || row.page || '-'} | ${Number(row.intentScore || 0)} | ${row.intentClass || '-'} | ${Number(row.searchClicks || 0)} | ${Number(row.affiliateClicks || 0)} | ${pct(row.outboundClicksPerSearchClick)} | ${yen(row.confirmedYen)} | ${yen(row.pendingYen)} |`);
+    lines.push(`| ${row.pagePath || row.page || '-'} | ${Number(row.intentScore || 0)} | ${row.intentClass || '-'} | ${Number(row.searchClicks || 0)} | ${Number(row.affiliateClicks || 0)} | ${pct(row.outboundClicksPerSearchClick)} | ${yen(row.confirmedYen)} | ${yen(row.confirmedYenPerSearchClick)} | ${yen(row.confirmedYenPerAffiliateClick)} | ${yen(row.pendingYen)} |`);
   }
 } else {
   lines.push('_No commercial signal data yet._');
