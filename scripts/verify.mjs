@@ -44,6 +44,7 @@ function run(name, args, extraEnv = {}) {
 }
 
 run('Deterministic analysis self-test', ['run', 'self-test']);
+run('URL safety test', ['run', 'url-safety-test']);
 run('Tracked secret scan', ['run', 'security']);
 run(production ? 'Strict launch readiness' : 'Launch readiness report', ['run', 'readiness'], production ? { READINESS_STRICT: 'true' } : {});
 run('Astro type/content check', ['run', 'check']);
