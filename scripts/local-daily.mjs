@@ -73,44 +73,31 @@ process.env.VERIFY_PRODUCTION = process.env.PUBLIC_READY === 'true' ? 'true' : '
 run(npmCommand, ['run', 'verify']);
 run(npmCommand, ['run', 'ops:summary']);
 
-const allowlistedPaths = [
-  'data/search-console/latest.json',
-  'data/analytics/latest.json',
-  'data/affiliate/a8-latest.json',
-  'data/affiliate/valuecommerce-latest.json',
-  'data/affiliate/normalized-latest.json',
-  'data/ai-usage',
-  'reports/daily-run.json',
-  'reports/readiness.json',
-  'reports/verification.json',
-  'reports/latest.json',
-  'reports/editor-plan.json',
-  'reports/ai-editor-proposal.json',
-  'reports/ops-summary.md',
-  'src/pages'
-];
-
+// This repository is public. Search queries, analytics, ASP revenue, AI usage and
+// operations reports remain local-only via .gitignore. Only public site source
+// edits are eligible for autonomous commit/push.
+const allowlistedPaths = ['src/pages'];
 for (const target of allowlistedPaths) {
   if (fs.existsSync(path.join(root, target))) run('git', ['add', '--', target]);
 }
 
 const staged = capture('git', ['diff', '--cached', '--name-only']);
 if (!staged) {
-  console.log('No allowlisted autonomous changes to commit.');
+  console.log('No public site changes to commit. Operational observations remain local-only.');
   process.exit(0);
 }
 
 const allowed = staged.split(/\r?\n/).filter(Boolean).every((file) =>
   allowlistedPaths.some((prefix) => file === prefix || file.startsWith(`${prefix}/`))
 );
-if (!allowed) throw new Error(`Refusing commit because staged files escaped allowlist:\n${staged}`);
+if (!allowed) throw new Error(`Refusing commit because staged files escaped public-content allowlist:\n${staged}`);
 
 const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
 run('git', ['commit', '-m', `chore: autonomous site update ${date}`]);
 
 if (autoPush) {
   run('git', ['push', 'origin', targetBranch]);
-  console.log('Autonomous update pushed. Cloudflare Pages Git integration will run the deployment gate.');
+  console.log('Autonomous public-content update pushed. Cloudflare Pages Git integration will run the deployment gate.');
 } else {
-  console.log('Autonomous update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
+  console.log('Autonomous public-content update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
 }
