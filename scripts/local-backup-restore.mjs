@@ -19,29 +19,33 @@ if (latestRequested && snapshotArg) throw new Error('Use only one of --latest or
 const expanded = configured.startsWith('~/')
   ? path.join(process.env.HOME || '', configured.slice(2))
   : configured;
-const backupRoot = fs.realpathSync(path.resolve(expanded));
+const backupRootCandidate = path.resolve(expanded);
+if (!fs.existsSync(backupRootCandidate)) throw new Error('LOCAL_BACKUP_DIR does not exist.');
+const backupRoot = fs.realpathSync(backupRootCandidate);
 
 function safeInside(parent, child) {
   const rel = path.relative(parent, child);
   return Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-let snapshot;
+let snapshotCandidate;
 if (latestRequested) {
   const latestFile = path.join(backupRoot, 'latest.json');
   if (!fs.existsSync(latestFile)) throw new Error('LOCAL_BACKUP_DIR/latest.json does not exist.');
+  if (fs.lstatSync(latestFile).isSymbolicLink()) throw new Error('latest.json must not be a symlink.');
   const latest = JSON.parse(fs.readFileSync(latestFile, 'utf8'));
-  snapshot = path.resolve(String(latest.snapshot || ''));
+  snapshotCandidate = path.resolve(String(latest.snapshot || ''));
 } else {
-  snapshot = path.isAbsolute(snapshotArg) ? path.resolve(snapshotArg) : path.resolve(backupRoot, snapshotArg);
+  snapshotCandidate = path.isAbsolute(snapshotArg) ? path.resolve(snapshotArg) : path.resolve(backupRoot, snapshotArg);
 }
 
-if (!safeInside(backupRoot, snapshot)) throw new Error('Requested snapshot must be inside LOCAL_BACKUP_DIR.');
-snapshot = fs.realpathSync(snapshot);
+if (!safeInside(backupRoot, snapshotCandidate)) throw new Error('Requested snapshot must be inside LOCAL_BACKUP_DIR.');
+const snapshot = fs.realpathSync(snapshotCandidate);
 if (!safeInside(backupRoot, snapshot)) throw new Error('Snapshot resolves outside LOCAL_BACKUP_DIR.');
 
 const manifestFile = path.join(snapshot, 'manifest.json');
 if (!fs.existsSync(manifestFile)) throw new Error('Snapshot manifest.json is missing.');
+if (fs.lstatSync(manifestFile).isSymbolicLink()) throw new Error('Snapshot manifest must not be a symlink.');
 const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
 if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.files)) throw new Error('Unsupported or invalid backup manifest.');
 
@@ -57,26 +61,31 @@ function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+const verifiedEntries = [];
+
 // Verify the entire snapshot before deleting any current local data.
 for (const item of manifest.files) {
   const relative = String(item.path || '').replace(/\\/g, '/');
   const allowed = allowedRoots.some((prefix) => relative === prefix || relative.startsWith(`${prefix}/`));
   if (!allowed) throw new Error(`Manifest contains non-restorable path: ${relative}`);
-  const source = path.resolve(snapshot, relative);
-  if (!safeInside(snapshot, source)) throw new Error(`Unsafe manifest path: ${relative}`);
-  const stat = fs.lstatSync(source);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Unsafe backup entry: ${relative}`);
+  const sourceCandidate = path.resolve(snapshot, relative);
+  if (!safeInside(snapshot, sourceCandidate)) throw new Error(`Unsafe manifest path: ${relative}`);
+  if (!fs.existsSync(sourceCandidate)) throw new Error(`Backup file missing: ${relative}`);
+  const lstat = fs.lstatSync(sourceCandidate);
+  if (!lstat.isFile() || lstat.isSymbolicLink()) throw new Error(`Unsafe backup entry: ${relative}`);
+  const source = fs.realpathSync(sourceCandidate);
+  if (!safeInside(snapshot, source)) throw new Error(`Backup entry resolves outside snapshot: ${relative}`);
+  const stat = fs.statSync(source);
   if (stat.size !== Number(item.bytes)) throw new Error(`Backup size mismatch: ${relative}`);
   if (sha256(source) !== item.sha256) throw new Error(`Backup SHA-256 mismatch: ${relative}`);
+  verifiedEntries.push({ relative, source });
 }
 
 for (const relative of allowedRoots) {
   fs.rmSync(path.join(root, relative), { recursive: true, force: true });
 }
 
-for (const item of manifest.files) {
-  const relative = String(item.path || '').replace(/\\/g, '/');
-  const source = path.resolve(snapshot, relative);
+for (const { relative, source } of verifiedEntries) {
   const destination = path.resolve(root, relative);
   if (!safeInside(root, destination)) throw new Error(`Unsafe restore destination: ${relative}`);
   fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
@@ -94,8 +103,8 @@ for (const relative of allowedRoots) {
 fs.mkdirSync(path.join(root, 'reports'), { recursive: true, mode: 0o700 });
 fs.writeFileSync(
   path.join(root, 'reports', 'restore-report.json'),
-  `${JSON.stringify({ restoredAt: new Date().toISOString(), snapshot, restoredFiles: manifest.files.length }, null, 2)}\n`,
+  `${JSON.stringify({ restoredAt: new Date().toISOString(), snapshot, restoredFiles: verifiedEntries.length }, null, 2)}\n`,
   { mode: 0o600 }
 );
 
-console.log(`Restored ${manifest.files.length} private operational file(s) from ${snapshot}.`);
+console.log(`Restored ${verifiedEntries.length} private operational file(s) from ${snapshot}.`);
