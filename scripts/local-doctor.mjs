@@ -43,8 +43,9 @@ const statusResult = capture('git', ['status', '--porcelain']);
 check('clean-working-tree', statusResult.ok && statusResult.stdout === '', 'required', 'working tree is clean');
 
 const automationEnabled = process.env.LOCAL_AUTOMATION_ENABLED === 'true';
+const autoPush = process.env.LOCAL_AUTO_PUSH === 'true';
 check('automation-enabled', automationEnabled, 'warning', 'LOCAL_AUTOMATION_ENABLED=true');
-check('auto-push-safety', process.env.LOCAL_AUTO_PUSH !== 'true' || automationEnabled, 'required', 'LOCAL_AUTO_PUSH=true requires LOCAL_AUTOMATION_ENABLED=true');
+check('auto-push-safety', !autoPush || automationEnabled, 'required', 'LOCAL_AUTO_PUSH=true requires LOCAL_AUTOMATION_ENABLED=true');
 
 const siteUrl = String(process.env.SITE_URL || '').trim();
 const publicReady = process.env.PUBLIC_READY === 'true';
@@ -55,10 +56,13 @@ const gscAny = gscValues.some(Boolean);
 const gscComplete = gscValues.every(Boolean);
 check('gsc-configuration', !gscAny || gscComplete, 'required', 'Search Console credentials are either complete or entirely unset');
 
+const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+check('ga-measurement-id', !gaMeasurementId || /^G-[A-Z0-9]+$/i.test(gaMeasurementId), 'required', 'PUBLIC_GA_MEASUREMENT_ID is empty or matches G-XXXXXXXXXX');
 const gaRequired = process.env.GA_FETCH_REQUIRED === 'true';
 const gaProperty = String(process.env.GA_PROPERTY_ID || '').trim();
 const gaEmail = String(process.env.GA_CLIENT_EMAIL || process.env.GSC_CLIENT_EMAIL || '').trim();
 const gaKey = String(process.env.GA_PRIVATE_KEY || process.env.GSC_PRIVATE_KEY || '').trim();
+check('ga-property-id', !gaProperty || /^\d+$/.test(gaProperty), 'required', 'GA_PROPERTY_ID is empty or numeric');
 check('ga-required-config', !gaRequired || (gaProperty && gaEmail && gaKey), 'required', 'GA_FETCH_REQUIRED=true requires GA_PROPERTY_ID and readable credentials');
 
 const vcKey = String(process.env.VALUECOMMERCE_CLIENT_KEY || '').trim();
@@ -74,6 +78,7 @@ check('auto-apply-config', process.env.EDITOR_AUTO_APPLY_TITLE !== 'true' || aiE
 const backupRequired = process.env.LOCAL_BACKUP_REQUIRED === 'true';
 const backupConfigured = String(process.env.LOCAL_BACKUP_DIR || '').trim();
 check('backup-required-config', !backupRequired || Boolean(backupConfigured), 'required', 'LOCAL_BACKUP_REQUIRED=true requires LOCAL_BACKUP_DIR');
+check('auto-push-backup', !autoPush || Boolean(backupConfigured), 'warning', 'LOCAL_AUTO_PUSH=true is safer with LOCAL_BACKUP_DIR configured');
 if (backupConfigured) {
   const expanded = backupConfigured.startsWith('~/') ? path.join(process.env.HOME || '', backupConfigured.slice(2)) : backupConfigured;
   const backupRoot = path.resolve(expanded);
@@ -100,7 +105,7 @@ if (a8Path) {
 }
 
 const majorNode = Number(process.versions.node.split('.')[0] || 0);
-check('node-version', majorNode >= 22, 'warning', `Node.js 22+ recommended (current ${process.versions.node})`);
+check('node-version', majorNode >= 22, 'required', `Node.js 22+ required (current ${process.versions.node})`);
 check('platform', process.platform === 'darwin', 'warning', `launchd requires macOS (current ${process.platform})`);
 
 const failures = checks.filter((item) => item.level === 'required' && !item.ok);
