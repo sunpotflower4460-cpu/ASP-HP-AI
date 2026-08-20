@@ -8,6 +8,7 @@ const latest = readJson('reports/latest.json');
 const readiness = readJson('reports/readiness.json');
 const verification = readJson('reports/verification.json');
 const editorPlan = readJson('reports/editor-plan.json');
+const dailyRun = readJson('reports/daily-run.json');
 
 const revenue = latest?.revenue || {};
 const signals = (latest?.commercialSignals || []).slice(0, 8);
@@ -15,6 +16,7 @@ const actions = (latest?.nextActions || []).slice(0, 8);
 const readinessFailures = (readiness?.checks || []).filter((x) => x.level === 'required' && !x.ok);
 const verifyStatus = verification?.ok === true ? 'PASS' : verification ? 'FAIL' : 'NOT RUN';
 const launchStatus = readiness?.readyForPublicLaunch ? 'READY' : 'NOT READY';
+const dailyStatus = dailyRun?.ok === true ? (dailyRun.degraded ? 'DEGRADED' : 'PASS') : dailyRun ? 'FAIL' : 'NOT RUN';
 
 const yen = (value) => `¥${Number(value || 0).toLocaleString('ja-JP')}`;
 const pct = (value) => value == null ? '-' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -25,9 +27,11 @@ const lines = [
   '',
   '## Status',
   '',
+  `- Daily run: **${dailyStatus}**`,
   `- Verification: **${verifyStatus}**`,
   `- Public-launch readiness: **${launchStatus}**`,
   `- PUBLIC_READY: **${verification?.publicReady === true ? 'true' : 'false'}**`,
+  `- AI editing skipped because degraded observations: **${dailyRun?.aiEditingSkippedBecauseDegraded === true ? 'yes' : 'no'}**`,
   `- Editor candidates: **${(editorPlan?.candidates || []).length}**`,
   '',
   '## Revenue',
@@ -59,6 +63,12 @@ if (actions.length) {
   lines.push('_No next actions yet._');
 }
 
+const degradedSteps = (dailyRun?.steps || []).filter((step) => step.optional && !step.ok);
+if (degradedSteps.length) {
+  lines.push('', '## Degraded observations', '');
+  for (const step of degradedSteps) lines.push(`- ${step.name}: exit ${step.exitCode}`);
+}
+
 lines.push('', '## Required readiness gaps', '');
 if (readinessFailures.length) {
   for (const item of readinessFailures) lines.push(`- ${item.id}: ${item.message}`);
@@ -68,6 +78,9 @@ if (readinessFailures.length) {
 
 if (verification?.failedStep) {
   lines.push('', '## Verification failure', '', `- Failed step: **${verification.failedStep}**`);
+}
+if (dailyRun?.failedStep) {
+  lines.push('', '## Daily-run failure', '', `- Failed step: **${dailyRun.failedStep}**`);
 }
 
 fs.mkdirSync('reports', { recursive: true });
