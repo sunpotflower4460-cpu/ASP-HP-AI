@@ -31,13 +31,19 @@ function run(name, args, extraEnv = {}) {
   }
 }
 
-// This is intentionally stricter than normal local development. It checks that
-// the machine can safely run the automation and that all public-launch-required
-// site/offer metadata is ready. PUBLIC_READY itself may still be false so the
-// final preview can remain noindex until the operator explicitly enables it.
+// This is intentionally stricter than normal local development. Initial launch
+// requires at least one verified active offer. Ongoing production deploys do not,
+// so ended offers can always be removed safely after launch.
+const initialLaunchEnv = {
+  READINESS_STRICT: 'true',
+  REQUIRE_ACTIVE_OFFER_FOR_LAUNCH: 'true'
+};
 run('Local environment doctor', ['run', 'local:doctor']);
-run('Strict public-launch prerequisites', ['run', 'readiness'], { READINESS_STRICT: 'true' });
-run('Full verification gates', ['run', 'verify'], { VERIFY_PRODUCTION: 'true' });
+run('Strict initial-launch prerequisites', ['run', 'readiness'], initialLaunchEnv);
+run('Full verification gates', ['run', 'verify'], {
+  VERIFY_PRODUCTION: 'true',
+  REQUIRE_ACTIVE_OFFER_FOR_LAUNCH: 'true'
+});
 
 report.ok = true;
 persist();
