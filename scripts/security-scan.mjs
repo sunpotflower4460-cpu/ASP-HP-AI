@@ -26,6 +26,24 @@ for (const forbidden of ['.env', '.env.local']) {
   if (files.includes(forbidden)) failures.push(`${forbidden} must never be tracked.`);
 }
 
+// The repository is public. Operational observations and revenue reports must
+// stay on the operator's machine, even if someone force-adds an ignored file.
+const privatePrefixes = [
+  'data/search-console/',
+  'data/analytics/',
+  'data/ai-usage/',
+  'reports/',
+  'imports/'
+];
+for (const relative of files) {
+  if (privatePrefixes.some((prefix) => relative.startsWith(prefix))) {
+    failures.push(`${relative}: operational/private data must not be tracked in this public repository`);
+  }
+  if (/^data\/affiliate\/.*\.json$/i.test(relative)) {
+    failures.push(`${relative}: affiliate revenue data must remain local-only`);
+  }
+}
+
 const textExtensions = new Set(['.js','.mjs','.cjs','.ts','.tsx','.astro','.md','.json','.yml','.yaml','.toml','.txt','.env','.example']);
 const directPatterns = [
   { name: 'private key block', regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
