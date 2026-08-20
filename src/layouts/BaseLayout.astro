@@ -8,6 +8,8 @@ const { title, description = site.description } = Astro.props;
 const publicReady = import.meta.env.PUBLIC_READY === 'true';
 const siteBase = Astro.site || new URL(import.meta.env.SITE_URL || site.url || 'https://example.com');
 const canonical = new URL(Astro.url.pathname, siteBase);
+const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -15,6 +17,22 @@ const websiteSchema = {
   url: siteBase.toString(),
   description: site.description
 };
+const analyticsScript = analyticsEnabled ? `
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', ${JSON.stringify(gaMeasurementId)});
+document.addEventListener('click', function(event) {
+  var target = event.target instanceof Element ? event.target.closest('a[data-affiliate-click="true"]') : null;
+  if (!target || typeof window.gtag !== 'function') return;
+  window.gtag('event', 'affiliate_click', {
+    affiliate_asp: target.dataset.asp || '',
+    offer_id: target.dataset.offerId || '',
+    page_id: target.dataset.pageId || '',
+    cta_id: target.dataset.ctaId || '',
+    position_id: target.dataset.positionId || ''
+  });
+});` : '';
 ---
 <!doctype html>
 <html lang="ja">
@@ -33,6 +51,8 @@ const websiteSchema = {
     <meta name="twitter:card" content="summary" />
     {!publicReady && <meta name="robots" content="noindex,nofollow" />}
     <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+    {analyticsEnabled && <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}></script>}
+    {analyticsEnabled && <script is:inline set:html={analyticsScript}></script>}
   </head>
   <body>
     <header class="site-header">

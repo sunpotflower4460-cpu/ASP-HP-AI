@@ -24,7 +24,18 @@ const href = enabled
   : '';
 ---
 {enabled ? (
-  <a class="affiliate-cta" href={href} rel="sponsored nofollow noopener" target="_blank">{label}</a>
+  <a
+    class="affiliate-cta"
+    href={href}
+    rel="sponsored nofollow noopener"
+    target="_blank"
+    data-affiliate-click="true"
+    data-asp={offer!.asp}
+    data-offer-id={offerId}
+    data-page-id={pageId}
+    data-cta-id={ctaId}
+    data-position-id={positionId}
+  >{label}</a>
 ) : (
   <span class="affiliate-cta disabled" aria-disabled="true">案件準備中</span>
 )}

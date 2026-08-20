@@ -10,6 +10,8 @@ const failures = [];
 const warnings = [];
 const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
 const allowedDecisionTags = new Set(decisionTags.map((tag) => tag.id));
+const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+if (gaMeasurementId && !/^G-[A-Z0-9]+$/i.test(gaMeasurementId)) failures.push('PUBLIC_GA_MEASUREMENT_ID must look like G-XXXXXXXXXX or be empty');
 
 const seenTagIds = new Set();
 for (const tag of decisionTags) {

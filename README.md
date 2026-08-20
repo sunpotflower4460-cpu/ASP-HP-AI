@@ -23,7 +23,6 @@ npm run dev
 ```
 
 ## 品質確認
-基本はこれだけです。
 ```bash
 npm run verify
 ```
@@ -33,7 +32,7 @@ npm run verify
 PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
 ```
 
-`verify` はreadiness、Astro check、content/freshness validation、build、内部リンク・PR表記・canonical・sitemap・robots・healthのSmoke Testまで実行し、結果を `reports/verification.json` に残します。
+`verify` はreadiness、Astro check、content/freshness validation、build、内部リンク・PR表記・canonical・sitemap・robots・health・Analytics整合のSmoke Testまで実行します。
 
 ## CIなしのCloudflare公開
 Cloudflare PagesをGitHubへ直接接続します。
@@ -46,7 +45,6 @@ Cloudflare PagesをGitHubへ直接接続します。
 build gateが失敗した場合はCloudflare側で公開されません。デプロイ後は `/health.json` で実際に公開されたbranch/commitを確認できます。
 
 ## CIなしの日次自動運転
-最初は手動で安全確認:
 ```bash
 cp .env.local.example .env.local
 npm run local:daily
@@ -85,7 +83,7 @@ npm run a8:import -- /path/to/a8-report.csv
 npm run affiliate:normalize
 npm run analyze
 ```
-既定はShift_JISです。`.env.local` の `A8_AUTO_IMPORT_FILE` を設定すると、所定のCSVを日次運転時に自動取り込みできます。
+`.env.local` の `A8_AUTO_IMPORT_FILE` を設定すると、所定のCSVを日次運転時に自動取り込みできます。
 
 ## ValueCommerce成果自動取得
 ```bash
@@ -95,6 +93,15 @@ npm run vc:fetch
 npm run affiliate:normalize
 npm run analyze
 ```
+
+## 任意GA4計測（初期OFF）
+ASPを問わず、どのページ・案件・CTA位置から外部クリックが起きたかを見る場合だけ設定します。
+
+```text
+PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+未設定ならGoogle tagはHTMLへ出ません。有効時は `affiliate_click` イベントへページID・案件ID・CTA ID・位置IDのみを追加送信し、Privacy/外部送信ページも自動で表示を切り替えます。設定と表示が矛盾するとbuildを停止します。
 
 ## AI編集長（初期値は停止）
 `npm run editor:plan` はSearch Consoleと収益データから0円で編集候補を作ります。
@@ -128,3 +135,4 @@ npm run editor:ai
 - 確定収益ページを自動変更より優先保護
 - 案件分類タグは中央レジストリの確認済み値だけ
 - ローカルbotはallowlist外ファイルを自動commitしない
+- Analyticsは明示設定しない限り完全OFF

@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const dist = path.resolve('dist');
 const publicReady = process.env.PUBLIC_READY === 'true';
+const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
 const failures = [];
 
 if (!fs.existsSync(dist)) {
@@ -43,6 +45,11 @@ for (const file of htmlFiles) {
   if (publicReady && html.includes('https://example.com')) failures.push(`${relative}: example.com remains in public build`);
   if (publicReady && /name=["']robots["'][^>]+noindex/i.test(html)) failures.push(`${relative}: public build still has noindex`);
 
+  const hasGoogleTag = html.includes('googletagmanager.com/gtag/js');
+  if (analyticsEnabled && !hasGoogleTag) failures.push(`${relative}: Google Analytics is configured but tag is missing`);
+  if (!analyticsEnabled && hasGoogleTag) failures.push(`${relative}: Google Analytics tag exists while analytics is disabled`);
+  if (analyticsEnabled && !html.includes('affiliate_click')) failures.push(`${relative}: affiliate_click analytics handler is missing`);
+
   for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
     const href = match[1];
     const target = resolveInternalHref(href);
@@ -69,8 +76,15 @@ if (fs.existsSync(path.join(dist, 'health.json'))) {
   }
 }
 
+const privacyPath = path.join(dist, 'privacy', 'index.html');
+const externalPath = path.join(dist, 'external-transmission', 'index.html');
+if (analyticsEnabled) {
+  if (!fs.existsSync(privacyPath) || !fs.readFileSync(privacyPath, 'utf8').includes('Google Analytics')) failures.push('privacy page does not disclose enabled Google Analytics');
+  if (!fs.existsSync(externalPath) || !fs.readFileSync(externalPath, 'utf8').includes('Google Analytics')) failures.push('external-transmission page does not disclose enabled Google Analytics');
+}
+
 if (failures.length) {
   console.error('Site smoke test failed:\n- ' + [...new Set(failures)].join('\n- '));
   process.exit(1);
 }
-console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked).`);
+console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked, analytics=${analyticsEnabled ? 'on' : 'off'}).`);

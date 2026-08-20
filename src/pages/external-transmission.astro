@@ -4,6 +4,8 @@ import { getActiveOffers } from '../lib/offers';
 
 const activeAsps = [...new Set(getActiveOffers().map((offer) => offer.asp.toLowerCase()))];
 const labels = { a8: 'A8.net', valuecommerce: 'バリューコマース' };
+const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
 ---
 <BaseLayout title="外部送信・アフィリエイト計測について">
   <article class="card">
@@ -14,6 +16,14 @@ const labels = { a8: 'A8.net', valuecommerce: 'バリューコマース' };
     ) : (
       <p>現在、公開中のアフィリエイト案件はありません。</p>
     )}
-    <p>アクセス解析などを追加する場合は、公開前に実際の送信先・送信情報・利用目的に合わせてこのページとプライバシーポリシーを更新します。</p>
+    {analyticsEnabled ? (
+      <section>
+        <h2>Google Analytics</h2>
+        <p>送信先: Google LLC。利用目的: サイト改善・アクセス状況の把握・広告導線の効果測定。</p>
+        <p>送信する情報: ページ閲覧に関する情報、ブラウザ・端末等の情報、およびアフィリエイトリンククリック時のページID・案件ID・CTA ID・表示位置ID。これらのカスタム識別子へ氏名・メールアドレス等の個人情報を意図して含めません。</p>
+      </section>
+    ) : (
+      <p>現在、Google Analyticsによる追加アクセス解析は有効化していません。</p>
+    )}
   </article>
 </BaseLayout>
