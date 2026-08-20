@@ -10,12 +10,14 @@ npm run verify
 
 `verify` は順番に以下を実行します。
 
-1. 公開準備レポート
-2. Astro/type/content check
-3. content validation
-4. 案件情報のfreshness check
-5. Astro build
-6. 生成後の内部リンク・PR表記・canonical・sitemap・robots・health smoke test
+1. commercial intentロジックの決定論的self-test
+2. tracked secret / private key /典型API token検査
+3. 公開準備レポート
+4. Astro type/content check
+5. content validation
+6. 案件情報のfreshness check
+7. Astro build
+8. 生成後の内部リンク・PR表記・canonical・sitemap・robots・health・Analytics整合Smoke Test
 
 本番公開条件まで厳格に確認するときは:
 
@@ -24,6 +26,18 @@ PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
 ```
 
 結果は `reports/verification.json` に残ります。
+
+日々の状態を1ファイルで見る場合:
+
+```bash
+npm run ops:summary
+```
+
+```text
+reports/ops-summary.md
+```
+
+へ、verify状態・公開準備・収益・GA4外部クリック・commercial intent・次の改善候補をまとめます。
 
 ## 2. Cloudflare Pages Git integrationを本番ゲートにする
 
@@ -77,16 +91,35 @@ Cloudflare環境では以下を確認できます。
 
 GitHub Actionsのstatusを見られなくても、どのcommitが実際に公開されたか確認できます。
 
-## 4. GitHub Actionsについて
+## 4. 日次自動運転
 
-`.github/workflows/` は補助/将来用として残してありますが、V1の公開可否・品質保証の正本ではありません。
+GitHub Actions schedulerは使わず、macOS `launchd` と `scripts/local-daily.mjs` を使います。詳細は [LOCAL_AUTOMATION.md](./LOCAL_AUTOMATION.md) を参照してください。
+
+```text
+launchd
+→ daily data fetch
+→ analyze
+→ editor plan / optional AI
+→ verify
+→ ops-summary
+→ allowlisted commit/push
+→ Cloudflare build gate
+```
+
+## 5. GitHub Actionsについて
+
+`.github/workflows/` は補助/将来用として残してありますが、V1の公開可否・品質保証・日次運転の正本ではありません。
 
 正本は:
 
 ```text
 npm run verify
         +
+reports/ops-summary.md
+        +
 Cloudflare Pages Git integration build gate
+        +
+/health.json
 ```
 
 です。
