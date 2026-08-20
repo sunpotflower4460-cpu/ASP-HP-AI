@@ -60,7 +60,7 @@ Cloudflare Pages build gate
 remote smoke
 ```
 
-- Node.js: 22+ (`.node-version`で22.16.0を固定)
+- Node.js: 22+ (`.node-version`で22.23.2を固定)
 - Astro: static-first
 - Hosting: Cloudflare Pages
 - DB: V1では不要

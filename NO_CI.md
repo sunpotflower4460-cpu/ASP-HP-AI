@@ -62,7 +62,7 @@ Cloudflare PagesをGitHubリポジトリへ直接接続します。GitHub Action
 - Build command: `npm run cloudflare:build`
 - Build output directory: `dist`
 - Root directory: repository root
-- Node: `.node-version` の22.16.0
+- Node: `.node-version` の22.23.2
 
 Cloudflare Pagesはbuild commandが非0終了した場合、そのbuildを失敗扱いにして公開しません。そのため `cloudflare:build` 自体がデプロイ前品質ゲートになります。
 
