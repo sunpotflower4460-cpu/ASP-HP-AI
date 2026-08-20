@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 
 const clientKey = process.env.VALUECOMMERCE_CLIENT_KEY;
