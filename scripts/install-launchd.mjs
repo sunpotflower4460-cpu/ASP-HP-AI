@@ -3,12 +3,39 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+const root = process.cwd();
+
+function loadEnvFile(file) {
+  if (!fs.existsSync(file)) return;
+  for (const rawLine of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const index = line.indexOf('=');
+    if (index <= 0) continue;
+    const key = line.slice(0, index).trim();
+    let value = line.slice(index + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.join(root, '.env.local'));
+
 if (process.platform !== 'darwin') {
   console.error('launchd installer is only supported on macOS. Run npm run local:daily from another scheduler on other OSes.');
   process.exit(1);
 }
 
-const root = process.cwd();
+const doctor = spawnSync(process.execPath, [path.join(root, 'scripts', 'local-doctor.mjs')], {
+  cwd: root,
+  env: process.env,
+  stdio: 'inherit'
+});
+if (doctor.status !== 0) {
+  console.error('Local doctor did not pass; launchd installation aborted.');
+  process.exit(doctor.status || 1);
+}
+
 const label = 'com.asphpai.daily';
 const hour = Math.max(0, Math.min(23, Number(process.env.LOCAL_SCHEDULE_HOUR || 7)));
 const minute = Math.max(0, Math.min(59, Number(process.env.LOCAL_SCHEDULE_MINUTE || 20)));
