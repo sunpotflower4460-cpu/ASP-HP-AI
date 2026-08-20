@@ -1,6 +1,10 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import GuideNav from '../../components/GuideNav.astro';
+import AffiliateCTA from '../../components/AffiliateCTA.astro';
+import { getActiveOffers } from '../../lib/offers';
+
+const activeOffers = getActiveOffers();
 ---
 <BaseLayout title="ネット環境を比較するときの基準" description="一人暮らし・賃貸でネット環境を比較するときに、月額以外で確認したい条件を整理します。">
   <article class="card">
@@ -12,5 +16,23 @@ import GuideNav from '../../components/GuideNav.astro';
     <h2>総額</h2><p>月額だけでなく初期費用や機器、工事、解約時に発生しうる費用も比較対象にします。</p>
     <h2>サポートと手続き</h2><p>申込みから利用開始までに必要な手続きや、困ったときの問い合わせ方法も確認します。</p>
   </article>
+
+  <section class="card">
+    <h2>現在確認できる提携サービス</h2>
+    <p>順位付けではなく、当サイトで事実情報と提携条件を確認済みの案件だけを表示します。申込み前には必ず遷移先の公式情報で最新条件をご確認ください。</p>
+    {activeOffers.length ? (
+      <div class="offer-list">
+        {activeOffers.map((offer, index) => (
+          <article class="offer-card">
+            <h3>{offer.name}</h3>
+            {typeof offer.facts?.summary?.value === 'string' && <p>{offer.facts.summary.value}</p>}
+            <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} />
+          </article>
+        ))}
+      </div>
+    ) : (
+      <p>現在は公開準備中です。案件をactiveにすると、確認済みサービスがここへ自動表示されます。</p>
+    )}
+  </section>
   <GuideNav />
 </BaseLayout>

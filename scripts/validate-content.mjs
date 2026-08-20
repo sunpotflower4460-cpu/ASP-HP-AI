@@ -3,10 +3,23 @@ import path from 'node:path';
 
 const root = process.cwd();
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'data/rules.json'), 'utf8'));
+const pages = JSON.parse(fs.readFileSync(path.join(root, 'data/pages.json'), 'utf8'));
 const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
 const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
+
+const seenPageIds = new Set();
+const seenPagePaths = new Set();
+for (const page of pages) {
+  if (!page.id || !page.path || !page.name) failures.push('data/pages.json: id/path/name are required');
+  if (seenPageIds.has(page.id)) failures.push(`data/pages.json: duplicate page id '${page.id}'`);
+  if (seenPagePaths.has(page.path)) failures.push(`data/pages.json: duplicate page path '${page.path}'`);
+  seenPageIds.add(page.id); seenPagePaths.add(page.path);
+  const relative = page.path === '/' ? 'index' : page.path.replace(/^\//, '').replace(/\/$/, '');
+  const target = path.join(root, 'src/pages', `${relative}.astro`);
+  if (!fs.existsSync(target)) failures.push(`data/pages.json: ${page.id} points to missing ${path.relative(root,target)}`);
+}
 
 const seenOfferIds = new Set();
 for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) {
