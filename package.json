@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,8 @@
     "cloudflare:build": "node scripts/cloudflare-build.mjs",
     "preview": "astro preview",
     "local:daily": "node scripts/local-daily.mjs",
+    "local:backup": "node scripts/local-backup-safe.mjs",
+    "local:backup:verify": "node scripts/local-backup-verify.mjs",
     "local:install": "node scripts/install-launchd.mjs",
     "local:uninstall": "node scripts/uninstall-launchd.mjs",
     "offer:new": "node scripts/create-offer.mjs",
