@@ -5,6 +5,9 @@ on:
     - cron: '0 22 * * *'
 permissions:
   contents: write
+concurrency:
+  group: daily-analysis
+  cancel-in-progress: false
 jobs:
   analyze:
     if: vars.AUTOMATION_ENABLED == 'true'
@@ -30,7 +33,11 @@ jobs:
       - run: npm run affiliate:normalize
       - run: npm run analyze
       - run: npm run editor:plan
+      - name: Clear stale AI proposal
+        run: rm -f reports/ai-editor-proposal.json
       - name: Optional low-cost AI editor
+        id: ai_editor
+        continue-on-error: true
         env:
           AI_EDITOR_ENABLED: ${{ vars.AI_EDITOR_ENABLED }}
           EDITOR_AUTO_APPLY_TITLE: ${{ vars.EDITOR_AUTO_APPLY_TITLE }}
@@ -40,6 +47,7 @@ jobs:
           CLOUDFLARE_AI_MODEL: ${{ vars.CLOUDFLARE_AI_MODEL }}
         run: npm run editor:ai
       - name: Apply explicitly enabled safe title proposals
+        if: steps.ai_editor.outcome == 'success'
         env:
           EDITOR_AUTO_APPLY_TITLE: ${{ vars.EDITOR_AUTO_APPLY_TITLE }}
         run: npm run editor:apply
@@ -48,6 +56,7 @@ jobs:
       - run: npm run check
       - run: npm run build
       - name: Store observations and allowed safe edits
+        if: success()
         shell: bash
         run: |
           git config user.name "asp-hp-ai-bot"
@@ -65,4 +74,23 @@ jobs:
           git add -- src/pages
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: update autonomous site observations"
+          git push
+      - name: Preserve observations when a later quality gate fails
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "asp-hp-ai-bot"
+          git config user.email "asp-hp-ai-bot@users.noreply.github.com"
+          git checkout -- src/pages || true
+          for p in \
+            data/search-console/latest.json \
+            data/affiliate/valuecommerce-latest.json \
+            data/affiliate/normalized-latest.json \
+            data/ai-usage \
+            reports/latest.json \
+            reports/editor-plan.json; do
+            if [ -e "$p" ]; then git add -- "$p"; fi
+          done
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: preserve observations after failed quality gate"
           git push

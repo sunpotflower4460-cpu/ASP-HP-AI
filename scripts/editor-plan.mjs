@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 const readJson = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const report = readJson('reports/latest.json');
@@ -21,6 +22,10 @@ function pageUrlToFile(target) {
   } catch { return null; }
 }
 
+function sha256File(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
 const candidates = [];
 for (const action of report.nextActions || []) {
   if (candidates.length >= Number(policy.maxDailyCandidates || 2)) break;
@@ -36,9 +41,10 @@ for (const action of report.nextActions || []) {
     kind: action.type === 'REVIEW_TITLE' ? 'title' : 'content',
     targetUrl: action.target,
     targetFile,
+    sourceSha256: sha256File(targetFile),
     query: action.query,
     protectedByRevenue: Boolean(action.protectedByRevenue),
-    risk: action.type === 'REVIEW_TITLE' ? 'medium' : 'medium',
+    risk: 'medium',
     requiresAI: true,
     autoApplyAllowed: action.type === 'REVIEW_TITLE' && !action.protectedByRevenue && policy.autoApply?.title === true,
     evidence: {
