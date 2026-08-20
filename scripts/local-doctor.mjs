@@ -64,6 +64,15 @@ const remoteSiteUrl = String(process.env.REMOTE_SITE_URL || '').trim();
 check('remote-site-url', !remoteSiteUrl || isSafeSiteBaseUrl(remoteSiteUrl), 'required', 'REMOTE_SITE_URL is empty or a safe HTTPS origin');
 const remoteTimeout = Number(process.env.REMOTE_SMOKE_TIMEOUT_MS || 10000);
 check('remote-smoke-timeout', Number.isFinite(remoteTimeout) && remoteTimeout >= 1000 && remoteTimeout <= 60000, 'required', 'REMOTE_SMOKE_TIMEOUT_MS must be between 1000 and 60000');
+const remoteSmokeAfterPush = process.env.REMOTE_SMOKE_AFTER_PUSH === 'true';
+const remoteExpectation = String(process.env.REMOTE_EXPECT_PUBLIC || '').trim();
+const remoteRetries = Number(process.env.REMOTE_SMOKE_RETRIES || 6);
+const remoteRetryDelay = Number(process.env.REMOTE_SMOKE_RETRY_DELAY_MS || 20000);
+check('remote-smoke-retries', Number.isInteger(remoteRetries) && remoteRetries >= 1 && remoteRetries <= 20, 'required', 'REMOTE_SMOKE_RETRIES must be an integer from 1 to 20');
+check('remote-smoke-retry-delay', Number.isInteger(remoteRetryDelay) && remoteRetryDelay >= 1000 && remoteRetryDelay <= 60000, 'required', 'REMOTE_SMOKE_RETRY_DELAY_MS must be an integer from 1000 to 60000');
+check('post-push-smoke-autopush', !remoteSmokeAfterPush || autoPush, 'required', 'REMOTE_SMOKE_AFTER_PUSH=true requires LOCAL_AUTO_PUSH=true');
+check('post-push-smoke-url', !remoteSmokeAfterPush || Boolean(remoteSiteUrl), 'required', 'REMOTE_SMOKE_AFTER_PUSH=true requires explicit REMOTE_SITE_URL');
+check('post-push-smoke-public-expectation', !remoteSmokeAfterPush || ['true', 'false'].includes(remoteExpectation), 'required', 'REMOTE_SMOKE_AFTER_PUSH=true requires REMOTE_EXPECT_PUBLIC=true or false explicitly');
 
 const gscValues = [process.env.GSC_CLIENT_EMAIL, process.env.GSC_PRIVATE_KEY, process.env.GSC_SITE_URL].map((value) => String(value || '').trim());
 const gscAny = gscValues.some(Boolean);
