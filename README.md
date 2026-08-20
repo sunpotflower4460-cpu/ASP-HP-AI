@@ -32,7 +32,17 @@ npm run verify
 PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
 ```
 
-`verify` はreadiness、Astro check、content/freshness validation、build、内部リンク・PR表記・canonical・sitemap・robots・health・Analytics整合のSmoke Testまで実行します。
+`verify` は以下を同じ順序で実行します。
+
+1. 収益意図スコアの決定論的self-test
+2. tracked secret / private key検査
+3. readiness
+4. Astro type/content check
+5. content/freshness validation
+6. build
+7. 内部リンク・PR表記・canonical・sitemap・robots・health・Analytics整合のSmoke Test
+
+Cloudflare Pagesのbuild gateでも同じ`verify`を使うため、GitHub Actionsは必須ではありません。
 
 ## CIなしのCloudflare公開
 Cloudflare PagesをGitHubへ直接接続します。
@@ -97,14 +107,32 @@ npm run analyze
 ## 任意GA4計測（初期OFF）
 ASPを問わず、どのページ・案件・CTA位置から外部クリックが起きたかを見る場合だけ設定します。
 
+ブラウザ側計測:
 ```text
 PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
-未設定ならGoogle tagはHTMLへ出ません。有効時は `affiliate_click` イベントへページID・案件ID・CTA ID・位置IDのみを追加送信し、Privacy/外部送信ページも自動で表示を切り替えます。設定と表示が矛盾するとbuildを停止します。
+未設定ならGoogle tagはHTMLへ出ません。有効時は`affiliate_click`イベントへページID・案件ID・CTA ID・位置IDだけを追加送信し、Privacy/外部送信ページも同じ設定から自動切替します。
+
+AIの日次分析へGA4の外部クリック数も渡す場合は、GA4 Propertyの数値IDを設定します。
+
+```text
+GA_PROPERTY_ID=123456789
+GA_FETCH_REQUIRED=false
+```
+
+GA4 Propertyへ読み取り用サービスアカウントをViewerとして追加します。`GA_CLIENT_EMAIL` / `GA_PRIVATE_KEY`を省略した場合はSearch Console用の`GSC_CLIENT_EMAIL` / `GSC_PRIVATE_KEY`を再利用します。
+
+手動確認:
+```bash
+npm run ga:fetch
+npm run analyze
+```
+
+`reports/latest.json`にはページ単位の検索クリック・affiliate_click・発生/確定報酬から`commercialSignals`を作成します。確定収益ページは保護し、検索流入があるのに外部クリック0のページはCTA/比較導線改善候補として扱います。
 
 ## AI編集長（初期値は停止）
-`npm run editor:plan` はSearch Consoleと収益データから0円で編集候補を作ります。
+`npm run editor:plan` はSearch Console・GA4外部クリック・収益データから0円で編集候補を作ります。
 
 Cloudflare Workers AIを使う場合のみ:
 ```bash
@@ -114,7 +142,7 @@ CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 npm run editor:ai
 ```
-検索クエリは信頼できない入力として扱い、出力はJSON Schemaで制約します。
+検索クエリは信頼できない入力として扱い、出力はJSON Schemaで制約します。CTR改善と外部クリック導線改善は別の`editorGoal`として扱い、AIは未確認の価格・順位・体験・緊急性を追加できません。
 
 ### Cost Governor
 `data/budget.json` で月AI予算（初期300円）と月間AI呼び出し上限（初期40回）を強制します。
@@ -131,8 +159,9 @@ npm run editor:ai
 - active案件のリンク・公式情報源はHTTPSのみ
 - A8以外へ未知の追跡パラメータを付けない
 - AI停止中でも静的サイトと収益導線は稼働
-- 自動編集はSearch Console実データがあるページだけ
+- 自動編集は実データがあるページだけ
 - 確定収益ページを自動変更より優先保護
 - 案件分類タグは中央レジストリの確認済み値だけ
 - ローカルbotはallowlist外ファイルを自動commitしない
 - Analyticsは明示設定しない限り完全OFF
+- `.env` / `.env.local` / private key /典型的なAPI tokenがtrackedされていればverifyを失敗させる
