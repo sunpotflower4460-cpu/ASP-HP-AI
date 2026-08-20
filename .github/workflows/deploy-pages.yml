@@ -47,3 +47,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Submit sitemap to Search Console
+        continue-on-error: true
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          PUBLIC_READY: ${{ vars.PUBLIC_READY }}
+          GSC_CLIENT_EMAIL: ${{ secrets.GSC_CLIENT_EMAIL }}
+          GSC_PRIVATE_KEY: ${{ secrets.GSC_PRIVATE_KEY }}
+          GSC_SITE_URL: ${{ secrets.GSC_SITE_URL }}
+        run: npm run gsc:submit
