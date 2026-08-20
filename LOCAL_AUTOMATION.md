@@ -7,13 +7,15 @@ git pull --ff-only
 ↓
 A8 CSV自動取り込み（任意）
 ↓
-Search Console / ValueCommerce取得
+Search Console / GA4 / ValueCommerce取得
 ↓
-収益正規化・分析
+収益正規化・commercial intent分析
 ↓
 AI編集候補 / 安全な自動編集（設定時のみ）
 ↓
 verify（公開中はstrict）
+↓
+ops-summary生成
 ↓
 許可されたファイルだけcommit
 ↓
@@ -34,7 +36,7 @@ Cloudflare Pages Git integrationがbuild gate + deploy
 - verifyに失敗
 - staged fileがallowlist外へ出た
 
-AIが書き換え可能でも、最終的な品質ゲートを通らなければcommit/pushされません。
+`verify`には収益意図ロジックのself-test、tracked secret scan、readiness、Astro check、content/freshness、build/smokeが含まれます。AIが書き換え可能でも、最終品質ゲートを通らなければcommit/pushされません。
 
 ## 1. 初回準備
 
@@ -53,7 +55,7 @@ LOCAL_AUTO_PUSH=false
 
 にします。
 
-Search Console / ValueCommerce / AIを使う場合は同ファイルへ必要情報を入れます。
+Search Console / GA4 / ValueCommerce / AIを使う場合は同ファイルへ必要情報を入れます。
 
 ## 2. 手動で1回テスト
 
@@ -64,6 +66,15 @@ npm run local:daily
 ```
 
 初回は `LOCAL_AUTO_PUSH=false` のため、正常ならlocal commitまで作られますがpushしません。
+
+確認する主なファイル:
+
+```text
+reports/ops-summary.md
+reports/verification.json
+reports/latest.json
+reports/editor-plan.json
+```
 
 内容を確認して問題なければ、そのcommitを手動pushします。
 
@@ -126,7 +137,47 @@ A8_CSV_ENCODING=shift_jis
 
 A8から公式CSVを書き出してそのファイルへ置けば、次回の日次処理で自動取り込みされます。
 
-## 6. 運用中にエラーになったら
+## 6. GA4外部クリックの自動取得（任意）
+
+ブラウザ側計測:
+
+```text
+PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+Data API:
+
+```text
+GA_PROPERTY_ID=123456789
+```
+
+GA4 PropertyへサービスアカウントをViewerとして追加します。`GA_CLIENT_EMAIL` / `GA_PRIVATE_KEY`を空にすると、Search Console用のサービスアカウントを再利用します。
+
+日次botは直近28日分の`affiliate_click`をページ単位で`data/analytics/latest.json`へ保存します。GA4を使わない場合は設定せず、その処理だけskipします。
+
+## 7. Operations Summary
+
+日次処理成功後に:
+
+```text
+reports/ops-summary.md
+```
+
+を作ります。
+
+ここには:
+
+- verify状態
+- 公開準備状態
+- 確定/未確定/否認報酬
+- 28日GA4 affiliate_click
+- commercial intent上位ページ
+- 次の自動改善候補
+- 公開前に残るrequired項目
+
+をまとめます。CI画面の代わりに、まずこの1ファイルを見る運用を想定しています。
+
+## 8. 運用中にエラーになったら
 
 botは失敗時に無理にcommit/pushしません。途中生成物がworking treeへ残る場合があります。これは次回実行を意図的に停止させる安全装置でもあります。
 
@@ -135,24 +186,28 @@ botは失敗時に無理にcommit/pushしません。途中生成物がworking t
 ```bash
 git status
 npm run verify
+npm run ops:summary
 ```
 
 で原因を確認し、人間が修正・commit/restoreしてworking treeをcleanに戻してから再開します。
 
-## 7. Cloudflareとの役割分担
+## 9. Cloudflareとの役割分担
 
 ```text
 launchd
 = 日次運転の時計
 
 local-daily.mjs
-= データ取得・分析・安全な変更・commit/push
+= データ取得・分析・安全な変更・verify・commit/push
 
 Cloudflare Pages Git integration
 = push後の独立したbuild gate + deploy
 
 /health.json
 = 実際に公開されたcommitの確認
+
+reports/ops-summary.md
+= 今日の運用状態の確認
 ```
 
 GitHub Actionsはこのループに不要です。
