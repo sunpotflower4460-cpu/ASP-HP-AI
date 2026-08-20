@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { acquireRunLock } from './lib/run-lock.mjs';
 
 const root = process.cwd();
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -84,6 +85,20 @@ function isSafeAutomatedOfferPause(file) {
   }
 }
 
+const runLock = acquireRunLock({
+  lockPath: path.join(root, 'logs', 'local-daily.lock'),
+  maxAgeHours: Number(process.env.LOCAL_RUN_LOCK_MAX_AGE_HOURS || 6),
+  metadata: { targetBranch, autoPush }
+});
+console.log(`Local daily lock acquired: ${runLock.runId}`);
+
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  process.once(signal, () => {
+    runLock.release();
+    process.exit(code);
+  });
+}
+
 const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']).stdout;
 if (branch !== targetBranch) throw new Error(`Local automation only runs on '${targetBranch}', current branch is '${branch}'.`);
 
@@ -91,6 +106,7 @@ const dirty = capture('git', ['status', '--porcelain']).stdout;
 if (dirty) throw new Error('Working tree is not clean. Local automation will not overwrite human changes.');
 
 run('git', ['pull', '--ff-only', 'origin', targetBranch]);
+run(npmCommand, ['run', 'local:permissions']);
 run(npmCommand, ['run', 'local:doctor']);
 
 // Safety scan may only move an existing active offer to paused. It never edits
