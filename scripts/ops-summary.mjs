@@ -17,9 +17,16 @@ const readinessFailures = (readiness?.checks || []).filter((x) => x.level === 'r
 const verifyStatus = verification?.ok === true ? 'PASS' : verification ? 'FAIL' : 'NOT RUN';
 const launchStatus = readiness?.readyForPublicLaunch ? 'READY' : 'NOT READY';
 const dailyStatus = dailyRun?.ok === true ? (dailyRun.degraded ? 'DEGRADED' : 'PASS') : dailyRun ? 'FAIL' : 'NOT RUN';
+const gscFreshness = latest?.sourceFreshness?.searchConsole || null;
+const gaFreshness = latest?.sourceFreshness?.analytics || null;
 
 const yen = (value) => `¥${Number(value || 0).toLocaleString('ja-JP')}`;
 const pct = (value) => value == null ? '-' : `${(Number(value) * 100).toFixed(1)}%`;
+const freshnessLabel = (value) => {
+  if (!value) return 'unknown';
+  if (!value.fresh) return `STALE${value.ageHours == null ? '' : ` (${value.ageHours}h)`}`;
+  return `fresh${value.ageHours == null ? '' : ` (${value.ageHours}h)`}`;
+};
 const lines = [
   '# ASP-HP-AI Operations Summary',
   '',
@@ -31,6 +38,8 @@ const lines = [
   `- Verification: **${verifyStatus}**`,
   `- Public-launch readiness: **${launchStatus}**`,
   `- PUBLIC_READY: **${verification?.publicReady === true ? 'true' : 'false'}**`,
+  `- Search Console data: **${freshnessLabel(gscFreshness)}**`,
+  `- GA4 data: **${freshnessLabel(gaFreshness)}**`,
   `- AI editing skipped because degraded observations: **${dailyRun?.aiEditingSkippedBecauseDegraded === true ? 'yes' : 'no'}**`,
   `- Editor candidates: **${(editorPlan?.candidates || []).length}**`,
   '',
@@ -40,7 +49,7 @@ const lines = [
   `- Pending: **${yen(revenue.pendingYen)}**`,
   `- Rejected: **${yen(revenue.rejectedYen)}**`,
   `- Normalized events: **${Number(revenue.events || 0)}**`,
-  `- GA4 affiliate_click (28d): **${Number(latest?.traffic?.totalAffiliateClicks || 0)}**`,
+  `- GA4 affiliate_click (28d, fresh data only): **${Number(latest?.traffic?.totalAffiliateClicks || 0)}**`,
   '',
   '## Top commercial signals',
   ''
@@ -67,6 +76,11 @@ const degradedSteps = (dailyRun?.steps || []).filter((step) => step.optional && 
 if (degradedSteps.length) {
   lines.push('', '## Degraded observations', '');
   for (const step of degradedSteps) lines.push(`- ${step.name}: exit ${step.exitCode}`);
+}
+if ((gscFreshness && !gscFreshness.fresh) || (gaFreshness && !gaFreshness.fresh)) {
+  lines.push('', '## Stale observation guard', '');
+  if (gscFreshness && !gscFreshness.fresh) lines.push('- Search Console is stale: SEO edit opportunities are suppressed until fresh data is fetched.');
+  if (gaFreshness && !gaFreshness.fresh) lines.push('- GA4 is stale: outbound-click gap/amplification decisions are suppressed until fresh data is fetched.');
 }
 
 lines.push('', '## Required readiness gaps', '');
