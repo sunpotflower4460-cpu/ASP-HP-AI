@@ -12,6 +12,8 @@
 - `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
 
+詳しい本番設定は [SETUP.md](./SETUP.md) を参照してください。
+
 ## 開始
 ```bash
 npm install
@@ -33,7 +35,6 @@ npm run readiness
 `reports/readiness.json` に、URL・運営者情報・連絡先・active案件・Search Consoleなどの準備状態を出力します。公開前に厳格チェックしたい場合は `READINESS_STRICT=true npm run readiness` を使います。
 
 ## Search Console
-サービスアカウントをSearch Consoleプロパティへ追加し、環境変数を設定します。
 ```bash
 npm run gsc:fetch
 npm run analyze
@@ -41,7 +42,6 @@ npm run editor:plan
 ```
 
 ## A8成果取り込み
-A8から取得した公式CSVを取り込みます。
 ```bash
 npm run a8:import -- /path/to/a8-report.csv
 npm run affiliate:normalize
@@ -50,7 +50,6 @@ npm run analyze
 既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。CSV全列は保存せず、成果分析に必要な最小データのみ残します。
 
 ## ValueCommerce成果自動取得
-管理画面「ツール > レポートAPI」でAPI認証キーを発行して環境変数へ設定します。
 ```bash
 VALUECOMMERCE_CLIENT_KEY=... \
 VALUECOMMERCE_CLIENT_SECRET=... \
@@ -63,7 +62,7 @@ npm run analyze
 ## AI編集長（初期値は停止）
 `npm run editor:plan` はSearch Consoleと収益データから編集候補を作ります。AIを使わないので0円です。
 
-Cloudflare Workers AIでタイトル/内容提案を作る場合のみ以下を設定します。
+Cloudflare Workers AIで提案を作る場合のみ:
 ```bash
 AI_EDITOR_ENABLED=true
 CLOUDFLARE_ACCOUNT_ID=...
@@ -71,7 +70,7 @@ CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
 npm run editor:ai
 ```
-第三者の有料モデルは `ALLOW_PAID_AI=true` を明示しない限り拒否します。さらに `EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` の両方が満たされた場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。収益実績のあるページは自動変更から保護されます。
+第三者の有料モデルは `ALLOW_PAID_AI=true` を明示しない限り拒否します。`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護されます。
 
 ## 日次パイプライン
 ```bash
@@ -79,14 +78,8 @@ npm run daily
 ```
 GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` にするまで動きません。
 
-## 公開前に必須
-1. `data/site.json` のURL・運営者情報・連絡先を設定
-2. `data/offers/*.json` に実案件を登録し、公式情報源を付ける
-3. `npm run build` をPASSさせる
-4. `READINESS_STRICT=true npm run readiness` をPASSさせる
-5. Search Console登録・サイトマップ確認
-6. PR/プライバシー/外部送信表示を実サイトで目視確認
-7. `PUBLIC_READY=true` を設定してからindex公開
+## Cloudflare Pages自動公開
+`deploy-pages.yml` はmainへのpush時に動きますが、`CLOUDFLARE_DEPLOY_ENABLED=true` にするまでdeployしません。公開前にはreadiness/buildを必ず通します。
 
 ## 安全思想
 - AIが外部情報を勝手に事実として追加しない
