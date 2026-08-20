@@ -216,6 +216,9 @@ if (autoPush) {
   console.log('Autonomous safe update pushed. Cloudflare Pages Git integration will run the deployment gate.');
   if (remoteSmokeAfterPush) {
     run(npmCommand, ['run', 'remote:wait']);
+    // remote:wait only succeeds after remote:smoke has observed the exact
+    // pushed commit. Refresh the local-only summary with that final report.
+    run(npmCommand, ['run', 'ops:summary']);
   }
 } else {
   console.log('Autonomous safe update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');

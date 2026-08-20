@@ -80,10 +80,13 @@ for (const relative of files) {
   for (const name of assignmentNames) {
     // Covers ENV syntax plus simple JSON/YAML assignments such as
     // "CLOUDFLARE_API_TOKEN": "..." without matching process.env reads.
-    const regex = new RegExp(`^\\s*["']?${name}["']?\\s*(?:=|:)\\s*([^\\r\\n]*)$`, 'gmi');
+    // Use horizontal whitespace only. `\s` also consumes newlines and could
+    // incorrectly treat the following ENV assignment as this key's value.
+    const regex = new RegExp(`^[ \\t]*["']?${name}["']?[ \\t]*(?:=|:)[ \\t]*([^\\r\\n]*)$`, 'gmi');
     for (const match of text.matchAll(regex)) {
       let value = String(match[1] || '').trim();
       value = value.replace(/[,}]\s*$/, '').trim();
+      value = value.replace(/\\\s*$/, '').trim();
       value = value.replace(/^['\"]|['\"]$/g, '').trim();
       if (!placeholderValues.has(value.toLowerCase()) && !value.startsWith('${') && !value.startsWith('$')) {
         failures.push(`${relative}: ${name} appears to contain a committed value`);
