@@ -33,52 +33,129 @@ const affiliateClicksByPath = new Map(
   (analytics?.rows || []).map((row) => [normalizePath(row.pagePath), Number(row.eventCount || 0)])
 );
 
+const searchByPath = new Map();
+for (const row of gsc?.rows || []) {
+  const pagePath = normalizePath(row.keys?.[1]);
+  const current = searchByPath.get(pagePath) || { clicks: 0, impressions: 0 };
+  current.clicks += Number(row.clicks || 0);
+  current.impressions += Number(row.impressions || 0);
+  searchByPath.set(pagePath, current);
+}
+
+const affiliatePaths = (affiliate?.paths || []).filter((x) => x.pageId || x.offerId || x.programId).slice(0, 100);
+const revenueByPath = new Map();
+for (const row of affiliatePaths) {
+  if (!row.pageId) continue;
+  const url = pageIdToUrl(row.pageId);
+  if (!url) continue;
+  const pagePath = normalizePath(url);
+  const current = revenueByPath.get(pagePath) || { confirmedYen: 0, pendingYen: 0, rejectedYen: 0 };
+  current.confirmedYen += Number(row.confirmedYen || 0);
+  current.pendingYen += Number(row.pendingYen || 0);
+  current.rejectedYen += Number(row.rejectedYen || 0);
+  revenueByPath.set(pagePath, current);
+}
+
+function intentScore({ searchClicks, affiliateClicks, confirmedYen, pendingYen }) {
+  const volume = Math.min(35, Math.log2(1 + Math.max(0, affiliateClicks)) * 8);
+  const outboundRate = searchClicks > 0 ? Math.min(1, affiliateClicks / searchClicks) : 0;
+  const efficiency = Math.min(25, outboundRate * 100);
+  const revenue = confirmedYen > 0 ? 40 : pendingYen > 0 ? 25 : 0;
+  return Math.round(Math.min(100, volume + efficiency + revenue));
+}
+
+const allSignalPaths = new Set([
+  ...searchByPath.keys(),
+  ...affiliateClicksByPath.keys(),
+  ...revenueByPath.keys()
+]);
+const commercialSignals = [...allSignalPaths].map((pagePath) => {
+  const search = searchByPath.get(pagePath) || { clicks: 0, impressions: 0 };
+  const revenue = revenueByPath.get(pagePath) || { confirmedYen: 0, pendingYen: 0, rejectedYen: 0 };
+  const affiliateClicks = affiliateClicksByPath.get(pagePath) || 0;
+  const score = intentScore({
+    searchClicks: search.clicks,
+    affiliateClicks,
+    confirmedYen: revenue.confirmedYen,
+    pendingYen: revenue.pendingYen
+  });
+  const className = score >= 80 ? 'proven' : score >= 60 ? 'strong' : score >= 35 ? 'promising' : 'weak';
+  return {
+    pagePath,
+    page: normalizeUrl(pagePath),
+    searchClicks: search.clicks,
+    impressions: search.impressions,
+    affiliateClicks,
+    outboundClicksPerSearchClick: search.clicks > 0 ? Number((affiliateClicks / search.clicks).toFixed(4)) : null,
+    confirmedYen: revenue.confirmedYen,
+    pendingYen: revenue.pendingYen,
+    rejectedYen: revenue.rejectedYen,
+    intentScore: score,
+    intentClass: className
+  };
+}).sort((a, b) => b.intentScore - a.intentScore || b.affiliateClicks - a.affiliateClicks);
+const signalByPath = new Map(commercialSignals.map((row) => [row.pagePath, row]));
+
 const opportunities = (gsc?.rows || [])
   .map((row) => {
     const page = normalizeUrl(row.keys?.[1]);
     const pagePath = normalizePath(row.keys?.[1]);
+    const signal = signalByPath.get(pagePath);
     return {
       query: row.keys?.[0],
       page,
       pagePath,
-      clicks: row.clicks,
-      impressions: row.impressions,
-      ctr: row.ctr,
-      position: row.position,
-      affiliateClicks: affiliateClicksByPath.get(pagePath) || 0
+      clicks: Number(row.clicks || 0),
+      impressions: Number(row.impressions || 0),
+      ctr: Number(row.ctr || 0),
+      position: Number(row.position || 0),
+      affiliateClicks: signal?.affiliateClicks || 0,
+      commercialIntentScore: signal?.intentScore || 0,
+      commercialIntentClass: signal?.intentClass || 'weak'
     };
   })
-  .filter((r)=>r.impressions>=10 && r.position>=4 && r.position<=20)
-  .map((r)=>({...r,action:r.impressions>=20 && r.ctr<0.03 ? 'REVIEW_TITLE' : 'REVIEW_CONTENT'}))
-  .sort((a,b)=>b.impressions-a.impressions)
-  .slice(0,30);
+  .filter((r) => r.impressions >= 10 && r.position >= 4 && r.position <= 20)
+  .map((r) => ({ ...r, action: r.impressions >= 20 && r.ctr < 0.03 ? 'REVIEW_TITLE' : 'REVIEW_CONTENT' }))
+  .sort((a, b) => (b.commercialIntentScore - a.commercialIntentScore) || (b.impressions - a.impressions))
+  .slice(0, 30);
 
-const affiliatePaths = (affiliate?.paths || []).filter((x) => x.pageId || x.offerId || x.programId).slice(0,30);
 const winners = affiliatePaths.filter((x) => x.confirmedYen > 0);
 const pending = affiliatePaths.filter((x) => x.confirmedYen === 0 && x.pendingYen > 0);
 const protectedPageIds = new Set(winners.map((x) => x.pageId).filter(Boolean));
 const protectedUrls = new Set([...protectedPageIds].map(pageIdToUrl).filter(Boolean));
 const protectedPages = [...protectedPageIds].map((pageId) => ({ pageId, page: pageById.get(pageId) || null, url: pageIdToUrl(pageId) }));
 
+const outboundGaps = commercialSignals
+  .filter((x) => x.searchClicks >= 20 && x.affiliateClicks === 0 && x.confirmedYen === 0)
+  .slice(0, 5);
+const strongUnconfirmed = commercialSignals
+  .filter((x) => x.intentScore >= 55 && x.affiliateClicks >= 3 && x.confirmedYen === 0)
+  .slice(0, 5);
+
+const nextActions = [
+  ...winners.slice(0, 5).map((x) => ({ type: 'PROTECT_WINNER', target: pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId: x.pageId || null, priority: 100, reason: `confirmed reward ¥${x.confirmedYen}` })),
+  ...pending.slice(0, 5).map((x) => ({ type: 'MONITOR_PENDING', target: pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId: x.pageId || null, priority: 90, reason: `pending reward ¥${x.pendingYen}` })),
+  ...strongUnconfirmed.map((x) => ({ type: 'AMPLIFY_COMMERCIAL_INTENT', target: x.page, pagePath: x.pagePath, priority: 75 + Math.min(15, Math.floor(x.intentScore / 10)), intentScore: x.intentScore, affiliateClicks: x.affiliateClicks, reason: `${x.affiliateClicks} outbound click(s), no confirmed reward yet` })),
+  ...outboundGaps.map((x) => ({ type: 'IMPROVE_OUTBOUND', target: x.page, pagePath: x.pagePath, priority: 70, intentScore: x.intentScore, searchClicks: x.searchClicks, reason: `${x.searchClicks} search click(s) but 0 outbound affiliate clicks` })),
+  ...opportunities.slice(0, 15).map((x) => ({ type: x.action, target: x.page, query: x.query, priority: 40 + Math.min(25, Math.floor(x.commercialIntentScore / 4)), protectedByRevenue: protectedUrls.has(x.page), affiliateClicks: x.affiliateClicks, intentScore: x.commercialIntentScore }))
+].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+
 const report = {
-  generatedAt:new Date().toISOString(),
-  gscFetchedAt:gsc?.fetchedAt || null,
-  analyticsFetchedAt:analytics?.fetchedAt || null,
-  affiliateNormalizedAt:affiliate?.normalizedAt || null,
+  generatedAt: new Date().toISOString(),
+  gscFetchedAt: gsc?.fetchedAt || null,
+  analyticsFetchedAt: analytics?.fetchedAt || null,
+  affiliateNormalizedAt: affiliate?.normalizedAt || null,
   traffic: {
     totalAffiliateClicks: Number(analytics?.totalAffiliateClicks || 0),
-    affiliateClicksByPage: (analytics?.rows || []).slice(0,50)
+    affiliateClicksByPage: (analytics?.rows || []).slice(0, 50)
   },
-  revenue: affiliate?.totals || { events:0,pendingYen:0,confirmedYen:0,rejectedYen:0,unknownYen:0 },
+  revenue: affiliate?.totals || { events: 0, pendingYen: 0, confirmedYen: 0, rejectedYen: 0, unknownYen: 0 },
+  commercialSignals: commercialSignals.slice(0, 50),
   opportunities,
-  affiliatePaths,
+  affiliatePaths: affiliatePaths.slice(0, 30),
   protectedPages,
-  nextActions: [
-    ...winners.slice(0,5).map((x) => ({type:'PROTECT_WINNER', target:pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId:x.pageId || null, reason:`confirmed reward ¥${x.confirmedYen}`})),
-    ...pending.slice(0,5).map((x) => ({type:'MONITOR_PENDING', target:pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId:x.pageId || null, reason:`pending reward ¥${x.pendingYen}`})),
-    ...opportunities.slice(0,10).map((x) => ({type:x.action, target:x.page, query:x.query, protectedByRevenue: protectedUrls.has(x.page), affiliateClicks:x.affiliateClicks}))
-  ]
+  nextActions
 };
-fs.mkdirSync('reports',{recursive:true});
-fs.writeFileSync('reports/latest.json',JSON.stringify(report,null,2));
-console.log(`Report: ${opportunities.length} search opportunities, ${Number(analytics?.totalAffiliateClicks || 0)} outbound affiliate click(s), ${winners.length} confirmed revenue paths, ${pending.length} pending paths.`);
+fs.mkdirSync('reports', { recursive: true });
+fs.writeFileSync('reports/latest.json', JSON.stringify(report, null, 2));
+console.log(`Report: ${opportunities.length} search opportunities, ${Number(analytics?.totalAffiliateClicks || 0)} outbound affiliate click(s), ${winners.length} confirmed revenue paths, ${pending.length} pending paths, ${commercialSignals.length} commercial signal page(s).`);
