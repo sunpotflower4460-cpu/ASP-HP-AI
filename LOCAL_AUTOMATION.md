@@ -17,12 +17,38 @@ verify（公開中はstrict）
 ↓
 ops-summary生成
 ↓
-許可されたファイルだけcommit
+公開サイトのsrc/pages変更だけcommit
 ↓
 push（明示ON時のみ）
 ↓
 Cloudflare Pages Git integrationがbuild gate + deploy
 ```
+
+## 最重要: このリポジトリはpublic
+
+検索クエリ、GA4観測、A8/ValueCommerce成果、収益額、AI使用履歴、運用レポートは**GitHubへcommitしません**。
+
+ローカル専用:
+
+```text
+data/search-console/
+data/analytics/
+data/affiliate/*.json
+data/ai-usage/
+reports/
+imports/
+.env.local
+```
+
+`.gitignore`だけでなく`npm run security`でも、これらがtrackedになった場合はverifyを失敗させます。
+
+日次botがGitへcommitできるのは原則:
+
+```text
+src/pages/**
+```
+
+だけです。観測だけの日はcommit自体を作りません。
 
 ## 安全条件
 
@@ -32,11 +58,13 @@ Cloudflare Pages Git integrationがbuild gate + deploy
 - 現在branchが指定branch（既定main）ではない
 - working treeに人間の未commit変更がある
 - `git pull --ff-only` に失敗
-- daily処理に失敗
+- 必須のローカル処理に失敗
 - verifyに失敗
-- staged fileがallowlist外へ出た
+- staged fileが公開コンテンツallowlist外へ出た
 
-`verify`には収益意図ロジックのself-test、tracked secret scan、readiness、Astro check、content/freshness、build/smokeが含まれます。AIが書き換え可能でも、最終品質ゲートを通らなければcommit/pushされません。
+外部API取得だけが失敗した場合はdegraded observation modeとして分析記録を継続できますが、その日はAI編集を行いません。
+
+`verify`には収益意図ロジックのself-test、tracked secret/private-data scan、readiness、Astro check、content/freshness、build/smokeが含まれます。
 
 ## 1. 初回準備
 
@@ -65,18 +93,23 @@ mainへ移動し、作業ツリーがcleanな状態で:
 npm run local:daily
 ```
 
-初回は `LOCAL_AUTO_PUSH=false` のため、正常ならlocal commitまで作られますがpushしません。
+初回は`LOCAL_AUTO_PUSH=false`です。
 
-確認する主なファイル:
+- AIが安全な公開ページ変更を作った場合だけlocal commitを作成
+- 観測データだけ更新された場合はcommitなし
+- 検索/収益データはローカルに残る
+
+確認する主なローカルファイル:
 
 ```text
 reports/ops-summary.md
+reports/daily-run.json
 reports/verification.json
 reports/latest.json
 reports/editor-plan.json
 ```
 
-内容を確認して問題なければ、そのcommitを手動pushします。
+公開ページ変更がある場合は`git show`等でcommit内容を確認してから手動pushします。
 
 ## 3. pushまで自動化
 
@@ -88,7 +121,7 @@ LOCAL_AUTO_PUSH=true
 
 へ変更します。
 
-以後、正常な日次更新はmainへpushされ、Cloudflare Pages Git integrationが公開前検証を実行します。
+以後、verifyを通った`src/pages/**`の変更だけmainへpushされ、Cloudflare Pages Git integrationが再度公開前検証します。
 
 ## 4. macOS launchdへ登録
 
@@ -135,7 +168,7 @@ A8_CSV_ENCODING=shift_jis
 
 と設定します。
 
-A8から公式CSVを書き出してそのファイルへ置けば、次回の日次処理で自動取り込みされます。
+A8から公式CSVを書き出してそのファイルへ置けば、次回の日次処理で自動取り込みされます。`imports/`はGitHubへcommitされません。
 
 ## 6. GA4外部クリックの自動取得（任意）
 
@@ -153,11 +186,11 @@ GA_PROPERTY_ID=123456789
 
 GA4 PropertyへサービスアカウントをViewerとして追加します。`GA_CLIENT_EMAIL` / `GA_PRIVATE_KEY`を空にすると、Search Console用のサービスアカウントを再利用します。
 
-日次botは直近28日分の`affiliate_click`をページ単位で`data/analytics/latest.json`へ保存します。GA4を使わない場合は設定せず、その処理だけskipします。
+日次botは直近28日分の`affiliate_click`をページ単位で`data/analytics/latest.json`へ保存します。これはローカル専用です。
 
 ## 7. Operations Summary
 
-日次処理成功後に:
+日次処理後に:
 
 ```text
 reports/ops-summary.md
@@ -167,21 +200,27 @@ reports/ops-summary.md
 
 ここには:
 
-- verify状態
+- daily run / verify状態
+- GSC/GAデータ鮮度
 - 公開準備状態
 - 確定/未確定/否認報酬
 - 28日GA4 affiliate_click
 - commercial intent上位ページ
 - 次の自動改善候補
+- degraded観測
 - 公開前に残るrequired項目
 
-をまとめます。CI画面の代わりに、まずこの1ファイルを見る運用を想定しています。
+をまとめます。**このファイルもローカル専用です。** CI画面の代わりにまずこれを確認します。
 
-## 8. 運用中にエラーになったら
+## 8. ローカルデータのバックアップ
 
-botは失敗時に無理にcommit/pushしません。途中生成物がworking treeへ残る場合があります。これは次回実行を意図的に停止させる安全装置でもあります。
+検索・収益データはGitHubへ置かないため、必要なら別のローカルディレクトリへ自動バックアップできます。詳細は`.env.local.example`の`LOCAL_DATA_BACKUP_DIR`を参照してください。
 
-確認後:
+## 9. 運用中にエラーになったら
+
+botは失敗時に無理にcommit/pushしません。
+
+確認:
 
 ```bash
 git status
@@ -189,25 +228,28 @@ npm run verify
 npm run ops:summary
 ```
 
-で原因を確認し、人間が修正・commit/restoreしてworking treeをcleanに戻してから再開します。
+`reports/ops-summary.md`と`reports/daily-run.json`を見て、必要なら修正して再開します。
 
-## 9. Cloudflareとの役割分担
+## 10. Cloudflareとの役割分担
 
 ```text
 launchd
 = 日次運転の時計
 
 local-daily.mjs
-= データ取得・分析・安全な変更・verify・commit/push
+= 非公開データ取得・分析・安全な公開ページ変更・verify
+
+ローカルデータ
+= GitHubへ送らない
 
 Cloudflare Pages Git integration
-= push後の独立したbuild gate + deploy
+= 公開ページ変更push後の独立build gate + deploy
 
 /health.json
 = 実際に公開されたcommitの確認
 
 reports/ops-summary.md
-= 今日の運用状態の確認
+= ローカルの運用状態確認
 ```
 
 GitHub Actionsはこのループに不要です。
