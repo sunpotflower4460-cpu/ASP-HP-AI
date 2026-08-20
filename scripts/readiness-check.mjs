@@ -8,12 +8,22 @@ const offers = fs.readdirSync(offerDir).filter((f) => f.endsWith('.json')).map((
 const activeOffers = offers.filter((offer) => offer.status === 'active');
 const checks = [];
 const add = (id, ok, level, message) => checks.push({ id, ok, level, message });
+const requireActiveOffer = process.env.REQUIRE_ACTIVE_OFFER_FOR_LAUNCH === 'true';
 
 const siteUrl = process.env.SITE_URL || site.url || '';
 add('site-url', Boolean(siteUrl) && !siteUrl.includes('example.com'), 'required', siteUrl && !siteUrl.includes('example.com') ? `Site URL: ${siteUrl}` : 'SITE_URL/data/site.json is still the example URL.');
 add('operator', Boolean(site.operator) && !String(site.operator).includes('設定してください'), 'required', 'Operator information must be finalized before public launch.');
 add('contact', Boolean(site.contact) && !String(site.contact).includes('設定してください'), 'required', 'Contact information must be finalized before public launch.');
-add('active-offer', activeOffers.length > 0, 'required', activeOffers.length ? `${activeOffers.length} active offer(s).` : 'No active affiliate offer is configured.');
+add(
+  'active-offer',
+  activeOffers.length > 0,
+  requireActiveOffer ? 'required' : 'informational',
+  activeOffers.length
+    ? `${activeOffers.length} active offer(s).`
+    : requireActiveOffer
+      ? 'Initial public launch requires at least one verified active affiliate offer.'
+      : 'No active affiliate offer is configured. This is allowed for an already-live site so ended offers can be removed safely.'
+);
 
 for (const offer of activeOffers) {
   const urlsOk = /^https:\/\//.test(offer.affiliateUrl || '') && /^https:\/\//.test(offer.officialUrl || '');
@@ -51,9 +61,15 @@ const publicReady = process.env.PUBLIC_READY === 'true';
 add('public-ready', publicReady, 'informational', publicReady ? 'PUBLIC_READY=true: indexing can be enabled.' : 'PUBLIC_READY is false: noindex + robots deny remain active.');
 
 const requiredFailures = checks.filter((check) => check.level === 'required' && !check.ok);
-const output = { generatedAt: new Date().toISOString(), readyForPublicLaunch: requiredFailures.length === 0, checks };
+const output = {
+  generatedAt: new Date().toISOString(),
+  mode: requireActiveOffer ? 'initial-launch' : 'ongoing-deploy',
+  requireActiveOffer,
+  readyForPublicLaunch: requiredFailures.length === 0,
+  checks
+};
 fs.mkdirSync('reports', { recursive: true });
 fs.writeFileSync('reports/readiness.json', JSON.stringify(output, null, 2));
 for (const check of checks) console.log(`${check.ok ? 'PASS' : 'WAIT'} [${check.level}] ${check.id}: ${check.message}`);
-console.log(output.readyForPublicLaunch ? 'Public-launch prerequisites are satisfied.' : `${requiredFailures.length} required public-launch prerequisite(s) remain.`);
+console.log(output.readyForPublicLaunch ? 'Required readiness prerequisites are satisfied.' : `${requiredFailures.length} required readiness prerequisite(s) remain.`);
 if (process.env.READINESS_STRICT === 'true' && requiredFailures.length) process.exit(1);
