@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const root = fs.realpathSync(process.cwd());
 const checks = [];
@@ -49,7 +50,7 @@ check('auto-push-safety', !autoPush || automationEnabled, 'required', 'LOCAL_AUT
 
 const siteUrl = String(process.env.SITE_URL || '').trim();
 const publicReady = process.env.PUBLIC_READY === 'true';
-check('public-site-url', !publicReady || (/^https:\/\//.test(siteUrl) && !/example\.com/i.test(siteUrl)), 'required', 'PUBLIC_READY=true requires a real HTTPS SITE_URL');
+check('public-site-url', !publicReady || isSafeHttpsUrl(siteUrl), 'required', 'PUBLIC_READY=true requires a real HTTPS SITE_URL without credentials/placeholders/local hosts');
 
 const gscValues = [process.env.GSC_CLIENT_EMAIL, process.env.GSC_PRIVATE_KEY, process.env.GSC_SITE_URL].map((value) => String(value || '').trim());
 const gscAny = gscValues.some(Boolean);
