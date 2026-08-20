@@ -1,12 +1,13 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "astro dev",
     "check": "astro check",
     "self-test": "node scripts/self-test.mjs",
+    "url-safety-test": "node scripts/url-safety-test.mjs",
     "security": "node scripts/security-scan.mjs",
     "validate": "node scripts/validate-content.mjs",
     "freshness": "node scripts/check-freshness.mjs",
