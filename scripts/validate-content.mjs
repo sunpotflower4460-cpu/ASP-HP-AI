@@ -1,6 +1,7 @@
 import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const root = process.cwd();
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'data/rules.json'), 'utf8'));
@@ -9,14 +10,6 @@ const decisionTags = JSON.parse(fs.readFileSync(path.join(root, 'data/decision-t
 const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
-const validUrl = (value, { allowExample = false } = {}) => {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password) return false;
-    if (!allowExample && /(^|\.)example\.(com|org|net)$/i.test(url.hostname)) return false;
-    return true;
-  } catch { return false; }
-};
 const todayJst = (() => {
   const parts = new Intl.DateTimeFormat('en', {
     timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
@@ -70,15 +63,15 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
   if (offer.status === 'active') {
     if (!offer.affiliateUrl) failures.push(`${file}: active offer requires affiliateUrl`);
     if (!offer.officialUrl) failures.push(`${file}: active offer requires officialUrl`);
-    if (offer.affiliateUrl && !validUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use a real HTTPS URL without embedded credentials/placeholders`);
-    if (offer.officialUrl && !validUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use a real HTTPS URL without embedded credentials/placeholders`);
+    if (offer.affiliateUrl && !isSafeHttpsUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use a real HTTPS URL without embedded credentials/placeholders/local hosts`);
+    if (offer.officialUrl && !isSafeHttpsUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use a real HTTPS URL without embedded credentials/placeholders/local hosts`);
     if (!(offer.allowedMedia || []).includes('web')) failures.push(`${file}: active offer must explicitly allow web`);
     if (String(offer.asp).toLowerCase() === 'valuecommerce' && (offer.aspProgramId == null || String(offer.aspProgramId).trim() === '')) failures.push(`${file}: active ValueCommerce offer requires aspProgramId`);
   }
   for (const [key, fact] of Object.entries(offer.facts || {})) {
     if (!fact.source || !fact.checkedAt || !fact.ttlDays) failures.push(`${file}: fact ${key} lacks source/checkedAt/ttlDays`);
-    if (fact.source && offer.status === 'active' && !validUrl(fact.source)) failures.push(`${file}: active fact ${key} source must use a real HTTPS URL without placeholders`);
-    else if (fact.source && offer.status !== 'active' && !validUrl(fact.source, { allowExample: true })) failures.push(`${file}: fact ${key} source must use HTTPS`);
+    if (fact.source && offer.status === 'active' && !isSafeHttpsUrl(fact.source)) failures.push(`${file}: active fact ${key} source must use a real HTTPS URL without placeholders/local hosts`);
+    else if (fact.source && offer.status !== 'active' && !isSafeHttpsUrl(fact.source, { allowPlaceholder: true })) failures.push(`${file}: fact ${key} source must use safe HTTPS`);
     const checkedAt = String(fact.checkedAt || '');
     if (checkedAt && (!/^\d{4}-\d{2}-\d{2}$/.test(checkedAt) || Number.isNaN(Date.parse(`${checkedAt}T00:00:00Z`)))) {
       failures.push(`${file}: fact ${key} checkedAt must be YYYY-MM-DD`);
