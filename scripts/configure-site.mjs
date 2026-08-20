@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const file = 'data/site.json';
 const current = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -38,8 +39,7 @@ if (!String(next.contact || '').trim()) errors.push('contact is required.');
 
 try {
   const url = new URL(String(next.url || ''));
-  if (url.protocol !== 'https:') errors.push('url must use HTTPS.');
-  if (url.username || url.password) errors.push('url must not include credentials.');
+  if (!isSafeHttpsUrl(url.toString())) errors.push('url must be a real HTTPS URL without credentials/placeholders/local hosts.');
   if (url.search || url.hash) errors.push('url must not include query/hash.');
   url.pathname = url.pathname.replace(/\/+$/, '') || '/';
   next.url = url.toString().replace(/\/$/, '');
