@@ -10,6 +10,17 @@ const site = readJson('data/site.json') || {};
 const siteBase = process.env.SITE_URL || site.url || 'https://example.com';
 const pageById = new Map(pages.map((page) => [page.id, page]));
 
+function freshness(timestamp, maxHours) {
+  const parsed = Date.parse(timestamp || '');
+  if (!Number.isFinite(parsed)) return { fresh: false, ageHours: null, maxHours };
+  const ageHours = Math.max(0, (Date.now() - parsed) / 3600000);
+  return { fresh: ageHours <= maxHours, ageHours: Number(ageHours.toFixed(1)), maxHours };
+}
+const gscFreshness = freshness(gsc?.fetchedAt, Math.max(1, Number(process.env.GSC_DATA_MAX_AGE_HOURS || 72)));
+const analyticsFreshness = freshness(analytics?.fetchedAt, Math.max(1, Number(process.env.GA_DATA_MAX_AGE_HOURS || 72)));
+const usableGscRows = gscFreshness.fresh ? (gsc?.rows || []) : [];
+const usableAnalyticsRows = analyticsFreshness.fresh ? (analytics?.rows || []) : [];
+
 const normalizePath = (value) => {
   try {
     const url = new URL(value, siteBase);
@@ -31,11 +42,11 @@ const pageIdToUrl = (id) => {
 };
 
 const affiliateClicksByPath = new Map(
-  (analytics?.rows || []).map((row) => [normalizePath(row.pagePath), Number(row.eventCount || 0)])
+  usableAnalyticsRows.map((row) => [normalizePath(row.pagePath), Number(row.eventCount || 0)])
 );
 
 const searchByPath = new Map();
-for (const row of gsc?.rows || []) {
+for (const row of usableGscRows) {
   const pagePath = normalizePath(row.keys?.[1]);
   const current = searchByPath.get(pagePath) || { clicks: 0, impressions: 0 };
   current.clicks += Number(row.clicks || 0);
@@ -93,7 +104,7 @@ const commercialSignals = [...allSignalPaths].map((pagePath) => {
 }).sort((a, b) => b.intentScore - a.intentScore || b.affiliateClicks - a.affiliateClicks);
 const signalByPath = new Map(commercialSignals.map((row) => [row.pagePath, row]));
 
-const opportunities = (gsc?.rows || [])
+const opportunities = usableGscRows
   .map((row) => {
     const page = normalizeUrl(row.keys?.[1]);
     const pagePath = normalizePath(row.keys?.[1]);
@@ -122,12 +133,12 @@ const protectedPageIds = new Set(winners.map((x) => x.pageId).filter(Boolean));
 const protectedUrls = new Set([...protectedPageIds].map(pageIdToUrl).filter(Boolean));
 const protectedPages = [...protectedPageIds].map((pageId) => ({ pageId, page: pageById.get(pageId) || null, url: pageIdToUrl(pageId) }));
 
-const outboundGaps = commercialSignals
-  .filter((x) => x.searchClicks >= 20 && x.affiliateClicks === 0 && x.confirmedYen === 0)
-  .slice(0, 5);
-const strongUnconfirmed = commercialSignals
-  .filter((x) => x.intentScore >= 55 && x.affiliateClicks >= 3 && x.confirmedYen === 0)
-  .slice(0, 5);
+const outboundGaps = analyticsFreshness.fresh
+  ? commercialSignals.filter((x) => x.searchClicks >= 20 && x.affiliateClicks === 0 && x.confirmedYen === 0).slice(0, 5)
+  : [];
+const strongUnconfirmed = analyticsFreshness.fresh
+  ? commercialSignals.filter((x) => x.intentScore >= 55 && x.affiliateClicks >= 3 && x.confirmedYen === 0).slice(0, 5)
+  : [];
 
 const nextActions = [
   ...winners.slice(0, 5).map((x) => ({ type: 'PROTECT_WINNER', target: pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId: x.pageId || null, priority: 100, reason: `confirmed reward ¥${x.confirmedYen}` })),
@@ -142,9 +153,13 @@ const report = {
   gscFetchedAt: gsc?.fetchedAt || null,
   analyticsFetchedAt: analytics?.fetchedAt || null,
   affiliateNormalizedAt: affiliate?.normalizedAt || null,
+  sourceFreshness: {
+    searchConsole: gscFreshness,
+    analytics: analyticsFreshness
+  },
   traffic: {
-    totalAffiliateClicks: Number(analytics?.totalAffiliateClicks || 0),
-    affiliateClicksByPage: (analytics?.rows || []).slice(0, 50)
+    totalAffiliateClicks: analyticsFreshness.fresh ? Number(analytics?.totalAffiliateClicks || 0) : 0,
+    affiliateClicksByPage: analyticsFreshness.fresh ? (analytics?.rows || []).slice(0, 50) : []
   },
   revenue: affiliate?.totals || { events: 0, pendingYen: 0, confirmedYen: 0, rejectedYen: 0, unknownYen: 0 },
   commercialSignals: commercialSignals.slice(0, 50),
@@ -155,4 +170,4 @@ const report = {
 };
 fs.mkdirSync('reports', { recursive: true });
 fs.writeFileSync('reports/latest.json', JSON.stringify(report, null, 2));
-console.log(`Report: ${opportunities.length} search opportunities, ${Number(analytics?.totalAffiliateClicks || 0)} outbound affiliate click(s), ${winners.length} confirmed revenue paths, ${pending.length} pending paths, ${commercialSignals.length} commercial signal page(s).`);
+console.log(`Report: ${opportunities.length} search opportunities, ${report.traffic.totalAffiliateClicks} fresh outbound affiliate click(s), ${winners.length} confirmed revenue paths, ${pending.length} pending paths, ${commercialSignals.length} commercial signal page(s). GSC fresh=${gscFreshness.fresh}, GA fresh=${analyticsFreshness.fresh}.`);
