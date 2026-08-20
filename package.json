@@ -1,11 +1,12 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "astro dev",
     "check": "astro check",
+    "lock:check": "node scripts/dependency-lock-check.mjs",
     "self-test": "node scripts/self-test.mjs",
     "url-safety-test": "node scripts/url-safety-test.mjs",
     "run-lock-test": "node scripts/run-lock-test.mjs",
