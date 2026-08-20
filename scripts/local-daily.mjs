@@ -80,6 +80,7 @@ const allowlistedPaths = [
   'data/affiliate/valuecommerce-latest.json',
   'data/affiliate/normalized-latest.json',
   'data/ai-usage',
+  'reports/daily-run.json',
   'reports/readiness.json',
   'reports/verification.json',
   'reports/latest.json',
