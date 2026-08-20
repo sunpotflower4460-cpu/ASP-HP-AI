@@ -10,6 +10,7 @@ const verification = readJson('reports/verification.json');
 const editorPlan = readJson('reports/editor-plan.json');
 const contentGapPlan = readJson('reports/content-gap-plan.json');
 const dailyRun = readJson('reports/daily-run.json');
+const gscObservation = readJson('data/search-console/latest.json');
 
 const revenue = latest?.revenue || {};
 const signals = (latest?.commercialSignals || []).slice(0, 8);
@@ -21,6 +22,7 @@ const launchStatus = readiness?.readyForPublicLaunch ? 'READY' : 'NOT READY';
 const dailyStatus = dailyRun?.ok === true ? (dailyRun.degraded ? 'DEGRADED' : 'PASS') : dailyRun ? 'FAIL' : 'NOT RUN';
 const gscFreshness = latest?.sourceFreshness?.searchConsole || null;
 const gaFreshness = latest?.sourceFreshness?.analytics || null;
+const gscPaging = gscObservation?.pagination || null;
 
 const yen = (value) => value == null ? '-' : `¥${Number(value || 0).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}`;
 const pct = (value) => value == null ? '-' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -42,6 +44,9 @@ const lines = [
   `- PUBLIC_READY: **${verification?.publicReady === true ? 'true' : 'false'}**`,
   `- Search Console data: **${freshnessLabel(gscFreshness)}**`,
   `- GA4 data: **${freshnessLabel(gaFreshness)}**`,
+  `- GSC rows/pages: **${Number(gscPaging?.totalRows ?? (gscObservation?.rows || []).length)} rows / ${gscPaging?.pagesFetched ?? '-'} page(s)**`,
+  `- GSC terminal page reached: **${gscPaging?.terminalPageReached === true ? 'yes' : gscPaging ? 'no' : 'unknown'}**`,
+  '- GSC query/page exhaustiveness: **best-effort only** (Search Console internal limits can omit rows)',
   `- AI editing skipped because degraded observations: **${dailyRun?.aiEditingSkippedBecauseDegraded === true ? 'yes' : 'no'}**`,
   `- Editor candidates: **${(editorPlan?.candidates || []).length}**`,
   `- Content-gap review candidates: **${(contentGapPlan?.candidates || []).length}**`,
@@ -96,6 +101,9 @@ if ((gscFreshness && !gscFreshness.fresh) || (gaFreshness && !gaFreshness.fresh)
   lines.push('', '## Stale observation guard', '');
   if (gscFreshness && !gscFreshness.fresh) lines.push('- Search Console is stale: SEO edit opportunities and content-gap proposals are suppressed until fresh data is fetched.');
   if (gaFreshness && !gaFreshness.fresh) lines.push('- GA4 is stale: outbound-click gap/amplification decisions are suppressed until fresh data is fetched.');
+}
+if (gscPaging && gscPaging.terminalPageReached !== true) {
+  lines.push('', '## Search Console paging guard', '', '- Latest GSC observation did not record a terminal page. Treat it as incomplete and review `GSC_MAX_PAGES` / fetch logs before using it for editorial decisions.');
 }
 
 lines.push('', '## Required readiness gaps', '');
