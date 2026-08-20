@@ -15,7 +15,7 @@ if (!report) {
 function pageUrlToFile(target) {
   if (!target) return null;
   try {
-    const base = site.url || process.env.SITE_URL || 'https://example.com';
+    const base = process.env.SITE_URL || site.url || 'https://example.com';
     const pathname = new URL(target, base).pathname.replace(/\/+$/, '') || '/';
     if (pathname === '/') return 'src/pages/index.astro';
     const candidate = path.join('src/pages', `${pathname.replace(/^\//, '')}.astro`);
