@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
