@@ -17,10 +17,23 @@ export function isSafeHttpsUrl(value, { allowPlaceholder = false } = {}) {
 
     const placeholder =
       hostname.endsWith('.example') ||
+      hostname.endsWith('.invalid') ||
+      hostname.endsWith('.test') ||
       /(^|\.)example\.(com|org|net)$/i.test(hostname);
     if (!allowPlaceholder && placeholder) return false;
 
     return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isSafeSiteBaseUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!isSafeHttpsUrl(url.toString())) return false;
+    if (url.search || url.hash) return false;
+    return url.pathname === '/' || url.pathname === '';
   } catch {
     return false;
   }
