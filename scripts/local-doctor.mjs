@@ -51,6 +51,11 @@ check('auto-push-safety', !autoPush || automationEnabled, 'required', 'LOCAL_AUT
 const runLockMaxAge = Number(process.env.LOCAL_RUN_LOCK_MAX_AGE_HOURS || 6);
 check('run-lock-max-age', Number.isFinite(runLockMaxAge) && runLockMaxAge > 0 && runLockMaxAge <= 168, 'required', 'LOCAL_RUN_LOCK_MAX_AGE_HOURS must be > 0 and <= 168');
 
+const productionBranch = String(process.env.PRODUCTION_BRANCH || 'main').trim();
+const validBranchName = /^[A-Za-z0-9._/-]+$/.test(productionBranch) && !productionBranch.startsWith('/') && !productionBranch.endsWith('/');
+check('production-branch', validBranchName, 'required', 'PRODUCTION_BRANCH uses a simple Git branch name');
+check('auto-push-production-branch', !autoPush || targetBranch === productionBranch, 'warning', 'LOCAL_AUTO_PUSH target differs from PRODUCTION_BRANCH; this is valid for preview automation but will not deploy production');
+
 const siteUrl = String(process.env.SITE_URL || '').trim();
 const publicReady = process.env.PUBLIC_READY === 'true';
 check('public-site-url', !publicReady || isSafeSiteBaseUrl(siteUrl), 'required', 'PUBLIC_READY=true requires a real HTTPS origin SITE_URL with no subpath/query/hash/credentials/placeholders/local hosts');
@@ -100,11 +105,19 @@ if (backupConfigured) {
     let writable = false;
     try {
       fs.mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
-      const probe = path.join(backupRoot, `.asp-hp-ai-doctor-${process.pid}`);
-      fs.writeFileSync(probe, 'ok', { mode: 0o600 });
-      fs.rmSync(probe, { force: true });
-      writable = true;
-    } catch {}
+      const realBackupRoot = fs.realpathSync(backupRoot);
+      const realRelative = path.relative(root, realBackupRoot);
+      const resolvesOutsideRepo = realBackupRoot !== root && (realRelative.startsWith('..') || path.isAbsolute(realRelative));
+      if (resolvesOutsideRepo) {
+        const probe = path.join(realBackupRoot, `.asp-hp-ai-doctor-${process.pid}`);
+        fs.writeFileSync(probe, 'ok', { mode: 0o600 });
+        fs.rmSync(probe, { force: true });
+        writable = true;
+      }
+      check('backup-realpath-outside-repo', resolvesOutsideRepo, 'required', 'LOCAL_BACKUP_DIR real path resolves outside the public repository');
+    } catch {
+      check('backup-realpath-outside-repo', false, 'required', 'LOCAL_BACKUP_DIR real path could not be verified');
+    }
     check('backup-writable', writable, 'required', 'LOCAL_BACKUP_DIR is writable');
   }
 }
@@ -114,6 +127,8 @@ if (a8Path) {
   const resolved = path.isAbsolute(a8Path) ? a8Path : path.join(root, a8Path);
   check('a8-import-file', fs.existsSync(resolved), 'warning', 'A8_AUTO_IMPORT_FILE currently exists');
 }
+
+check('package-lock-present', fs.existsSync(path.join(root, 'package-lock.json')), 'warning', 'package-lock.json exists; initial launch requires it via npm run lock:check');
 
 const majorNode = Number(process.versions.node.split('.')[0] || 0);
 check('node-version', majorNode >= 22, 'required', `Node.js 22+ required (current ${process.versions.node})`);
