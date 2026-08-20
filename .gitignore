@@ -4,4 +4,12 @@ dist/
 .env
 .env.local
 logs/
+imports/
 .DS_Store
+
+# Operational data is local-only. This repository is public.
+data/search-console/
+data/analytics/
+data/ai-usage/
+data/affiliate/*.json
+reports/
