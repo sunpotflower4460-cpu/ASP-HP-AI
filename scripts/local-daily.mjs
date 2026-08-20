@@ -57,6 +57,7 @@ const dirty = capture('git', ['status', '--porcelain']);
 if (dirty) throw new Error('Working tree is not clean. Local automation will not overwrite human changes.');
 
 run('git', ['pull', '--ff-only', 'origin', targetBranch]);
+run(npmCommand, ['run', 'local:doctor']);
 
 const a8Import = process.env.A8_AUTO_IMPORT_FILE?.trim();
 if (a8Import) {
