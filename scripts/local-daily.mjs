@@ -71,6 +71,7 @@ if (a8Import) {
 run(npmCommand, ['run', 'daily']);
 process.env.VERIFY_PRODUCTION = process.env.PUBLIC_READY === 'true' ? 'true' : 'false';
 run(npmCommand, ['run', 'verify']);
+run(npmCommand, ['run', 'ops:summary']);
 
 const allowlistedPaths = [
   'data/search-console/latest.json',
@@ -84,6 +85,7 @@ const allowlistedPaths = [
   'reports/latest.json',
   'reports/editor-plan.json',
   'reports/ai-editor-proposal.json',
+  'reports/ops-summary.md',
   'src/pages'
 ];
 
