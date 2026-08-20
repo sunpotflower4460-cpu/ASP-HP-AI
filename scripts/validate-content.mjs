@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,7 +9,14 @@ const decisionTags = JSON.parse(fs.readFileSync(path.join(root, 'data/decision-t
 const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
-const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
+const validUrl = (value, { allowExample = false } = {}) => {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) return false;
+    if (!allowExample && /(^|\.)example\.(com|org|net)$/i.test(url.hostname)) return false;
+    return true;
+  } catch { return false; }
+};
 const allowedDecisionTags = new Set(decisionTags.map((tag) => tag.id));
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 if (gaMeasurementId && !/^G-[A-Z0-9]+$/i.test(gaMeasurementId)) failures.push('PUBLIC_GA_MEASUREMENT_ID must look like G-XXXXXXXXXX or be empty');
@@ -52,14 +60,15 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
   if (offer.status === 'active') {
     if (!offer.affiliateUrl) failures.push(`${file}: active offer requires affiliateUrl`);
     if (!offer.officialUrl) failures.push(`${file}: active offer requires officialUrl`);
-    if (offer.affiliateUrl && !validUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use HTTPS`);
-    if (offer.officialUrl && !validUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use HTTPS`);
+    if (offer.affiliateUrl && !validUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use a real HTTPS URL without embedded credentials/placeholders`);
+    if (offer.officialUrl && !validUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use a real HTTPS URL without embedded credentials/placeholders`);
     if (!(offer.allowedMedia || []).includes('web')) failures.push(`${file}: active offer must explicitly allow web`);
     if (String(offer.asp).toLowerCase() === 'valuecommerce' && (offer.aspProgramId == null || String(offer.aspProgramId).trim() === '')) failures.push(`${file}: active ValueCommerce offer requires aspProgramId`);
   }
   for (const [key, fact] of Object.entries(offer.facts || {})) {
     if (!fact.source || !fact.checkedAt || !fact.ttlDays) failures.push(`${file}: fact ${key} lacks source/checkedAt/ttlDays`);
-    if (fact.source && !validUrl(fact.source)) failures.push(`${file}: fact ${key} source must use HTTPS`);
+    if (fact.source && offer.status === 'active' && !validUrl(fact.source)) failures.push(`${file}: active fact ${key} source must use a real HTTPS URL without placeholders`);
+    else if (fact.source && offer.status !== 'active' && !validUrl(fact.source, { allowExample: true })) failures.push(`${file}: fact ${key} source must use HTTPS`);
   }
   if (!['a8','valuecommerce'].includes(String(offer.asp).toLowerCase())) warnings.push(`${file}: ASP '${offer.asp}' has no built-in adapter yet`);
 }
