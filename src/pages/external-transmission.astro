@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getActiveOffers } from '../lib/offers';
+
+const activeAsps = [...new Set(getActiveOffers().map((offer) => offer.asp.toLowerCase()))];
+const labels = { a8: 'A8.net', valuecommerce: 'バリューコマース' };
+---
+<BaseLayout title="外部送信・アフィリエイト計測について">
+  <article class="card">
+    <h1>外部送信・アフィリエイト計測について</h1>
+    <p>当サイトでは、アフィリエイト広告のリンクをクリックした場合、成果計測のためASPや広告主側のページへ遷移します。実際に有効化しているASPを下記に表示します。</p>
+    {activeAsps.length ? (
+      <ul>{activeAsps.map((asp) => <li><strong>{labels[asp] || asp}</strong> — 広告リンクのクリック・成果計測のため</li>)}</ul>
+    ) : (
+      <p>現在、公開中のアフィリエイト案件はありません。</p>
+    )}
+    <p>アクセス解析などを追加する場合は、公開前に実際の送信先・送信情報・利用目的に合わせてこのページとプライバシーポリシーを更新します。</p>
+  </article>
+</BaseLayout>

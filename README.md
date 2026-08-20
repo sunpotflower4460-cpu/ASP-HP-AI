@@ -9,7 +9,7 @@
 - Search Consoleを主な観測データにする
 - AIは大量記事生成ではなく「必要な改善だけ」を行う
 - PR表記・事実ソース・情報鮮度・予算上限をコードで強制
-- `PUBLIC_READY=true` になるまで `noindex` を維持
+- `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
 
 ## 開始
@@ -25,6 +25,12 @@ npm run freshness
 npm run check
 npm run build
 ```
+
+## 公開準備チェック
+```bash
+npm run readiness
+```
+`reports/readiness.json` に、URL・運営者情報・連絡先・active案件・Search Consoleなどの準備状態を出力します。公開前に厳格チェックしたい場合は `READINESS_STRICT=true npm run readiness` を使います。
 
 ## Search Console
 サービスアカウントをSearch Consoleプロパティへ追加し、環境変数を設定します。
@@ -74,16 +80,18 @@ npm run daily
 GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` にするまで動きません。
 
 ## 公開前に必須
-1. `data/site.json` の運営者情報・URLを設定
+1. `data/site.json` のURL・運営者情報・連絡先を設定
 2. `data/offers/*.json` に実案件を登録し、公式情報源を付ける
 3. `npm run build` をPASSさせる
-4. Search Console登録・サイトマップ確認
-5. PR/外部送信表示を実サイトで目視確認
-6. `PUBLIC_READY=true` を設定してからindex公開
+4. `READINESS_STRICT=true npm run readiness` をPASSさせる
+5. Search Console登録・サイトマップ確認
+6. PR/プライバシー/外部送信表示を実サイトで目視確認
+7. `PUBLIC_READY=true` を設定してからindex公開
 
 ## 安全思想
 - AIが外部情報を勝手に事実として追加しない
 - active案件の事実が期限切れならbuildを止める
+- active案件のリンク・公式情報源はHTTPSのみ
 - A8以外のASPリンクに未知の追跡パラメータを勝手に付けない
 - AIを止めても静的サイトと収益導線は動き続ける
 - 自動編集はSearch Consoleの実データがあるページだけを対象にする

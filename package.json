@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "check": "astro check",
     "validate": "node scripts/validate-content.mjs",
     "freshness": "node scripts/check-freshness.mjs",
+    "readiness": "node scripts/readiness-check.mjs",
     "build": "npm run validate && npm run freshness && astro build",
     "preview": "astro preview",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
