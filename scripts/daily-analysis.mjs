@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import { scoreCommercialIntent, classifyCommercialIntent } from './lib/commercial-intent.mjs';
 
