@@ -4,8 +4,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <BaseLayout title="3問でネット環境の方向性を整理">
   <section class="card">
     <h1>3問診断</h1>
-    <p>サービスを決める診断ではなく、まず「どの種類を比較すべきか」を整理します。</p>
-    <div id="quiz"></div>
+    <p>特定サービスを決める診断ではなく、まず「どの種類・条件を比較すべきか」を整理します。</p>
+    <div id="quiz" aria-live="polite"></div>
   </section>
   <script is:inline>
     const quiz = document.querySelector('#quiz');
@@ -18,8 +18,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     let index = 0;
     function render(){
       if(index >= questions.length){
-        const result = state.construction === 'no' ? '工事不要型を中心に比較' : state.use === 'game' ? '固定回線を優先して比較' : state.stay === 'short' ? '初期費用・解約条件を重視して比較' : '固定回線と工事不要型の両方を比較';
-        quiz.innerHTML = `<h2>整理結果</h2><p><strong>${result}</strong></p><p><a href="/guide/rental-internet/">選び方を確認する →</a></p>`;
+        let result = '固定回線と工事不要型の両方を比較';
+        let href = '/guide/fiber-vs-home-router/';
+        if(state.construction === 'no') { result = '工事不要型を中心に比較'; href = '/guide/no-construction/'; }
+        else if(state.use === 'game') { result = 'ゲーム用途の条件から固定回線を含めて比較'; href = '/guide/gaming/'; }
+        else if(state.use === 'work') { result = '在宅勤務で必要な条件を先に確認'; href = '/guide/work-from-home/'; }
+        else if(state.stay === 'short') { result = '初期費用・工事・解約条件を重視して比較'; href = '/guide/short-stay/'; }
+        quiz.innerHTML = `<h2>整理結果</h2><p><strong>${result}</strong></p><p><a href="${href}">この条件の選び方を確認する →</a></p><p><a href="/comparison/">比較基準も見る</a></p>`;
         return;
       }
       const [key,title,choices] = questions[index];

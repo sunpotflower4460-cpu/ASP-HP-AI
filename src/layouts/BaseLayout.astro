@@ -6,6 +6,15 @@ import '../styles/global.css';
 interface Props { title: string; description?: string; }
 const { title, description = site.description } = Astro.props;
 const publicReady = import.meta.env.PUBLIC_READY === 'true';
+const siteBase = Astro.site || new URL(import.meta.env.SITE_URL || site.url || 'https://example.com');
+const canonical = new URL(Astro.url.pathname, siteBase);
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: site.name,
+  url: siteBase.toString(),
+  description: site.description
+};
 ---
 <!doctype html>
 <html lang="ja">
@@ -14,12 +23,18 @@ const publicReady = import.meta.env.PUBLIC_READY === 'true';
     <meta name="viewport" content="width=device-width" />
     <title>{title} | {site.name}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.toString()} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={`${title} | ${site.name}`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.toString()} />
     {!publicReady && <meta name="robots" content="noindex,nofollow" />}
+    <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
   </head>
   <body>
     <header class="site-header">
       <a href="/" class="brand">{site.name}</a>
-      <nav><a href="/guide/rental-internet/">選び方</a><a href="/diagnosis/">3問診断</a></nav>
+      <nav aria-label="主要メニュー"><a href="/guide/rental-internet/">選び方</a><a href="/comparison/">比較</a><a href="/diagnosis/">3問診断</a><a href="/faq/">FAQ</a></nav>
     </header>
     <Disclosure />
     <main><slot /></main>
