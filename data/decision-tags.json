@@ -1,0 +1,9 @@
+[
+  {"id":"fiber","label":"固定回線を検討","filter":true,"description":"固定回線として比較対象にできることを公式情報等で確認した案件"},
+  {"id":"home-router","label":"工事不要を検討","filter":true,"description":"ホームルーター等、回線工事を前提としないことを確認した案件"},
+  {"id":"mobile","label":"持ち運び用途","filter":false,"description":"モバイル回線・持ち運び用途として確認した案件"},
+  {"id":"short-stay","label":"短期居住で比較","filter":true,"description":"短期居住の比較候補として契約条件を確認した案件"},
+  {"id":"work","label":"在宅勤務で比較","filter":true,"description":"在宅勤務の比較候補として扱うための条件を確認した案件"},
+  {"id":"gaming","label":"ゲーム用途で比較","filter":true,"description":"ゲーム用途の比較候補として扱うための条件を確認した案件"},
+  {"id":"no-construction","label":"工事なし","filter":false,"description":"新規回線工事を前提としないことを確認した案件"}
+]

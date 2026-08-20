@@ -4,8 +4,12 @@ import GuideNav from '../../components/GuideNav.astro';
 import AffiliateCTA from '../../components/AffiliateCTA.astro';
 import { getActiveOffers } from '../../lib/offers';
 import type { Offer } from '../../lib/offers';
+import decisionTags from '../../../data/decision-tags.json';
 
 const activeOffers = getActiveOffers();
+const filterTags = decisionTags.filter((tag) => tag.filter);
+const filterIds = filterTags.map((tag) => tag.id);
+const tagLabel = new Map(decisionTags.map((tag) => [tag.id, tag.label]));
 const checkedAt = (offer: Offer) => {
   const dates = Object.values(offer.facts || {}).map((fact) => fact.checkedAt).filter(Boolean).sort();
   return dates.at(-1) || null;
@@ -31,11 +35,7 @@ const checkedAt = (offer: Offer) => {
     <p>案件ごとに公式情報と照合して登録したタグだけを使います。タグが未確認の案件をAIが推測して分類することはありません。</p>
     <div class="filter-row" aria-label="比較条件">
       <button class="filter-chip" data-focus="all">すべて</button>
-      <button class="filter-chip" data-focus="fiber">固定回線を検討</button>
-      <button class="filter-chip" data-focus="home-router">工事不要を検討</button>
-      <button class="filter-chip" data-focus="short-stay">短期居住</button>
-      <button class="filter-chip" data-focus="work">在宅勤務</button>
-      <button class="filter-chip" data-focus="gaming">ゲーム</button>
+      {filterTags.map((tag) => <button class="filter-chip" data-focus={tag.id}>{tag.label}</button>)}
     </div>
     <p id="filter-status" class="muted" aria-live="polite"></p>
   </section>
@@ -50,7 +50,7 @@ const checkedAt = (offer: Offer) => {
             <h3>{offer.name}</h3>
             {typeof offer.facts?.summary?.value === 'string' && <p>{offer.facts.summary.value}</p>}
             {(offer.decisionTags || []).length > 0 && (
-              <p class="tag-list" aria-label="確認済み条件">{offer.decisionTags!.map((tag) => <span class="tag">{tag}</span>)}</p>
+              <p class="tag-list" aria-label="確認済み条件">{offer.decisionTags!.map((tag) => <span class="tag">{tagLabel.get(tag) || tag}</span>)}</p>
             )}
             {checkedAt(offer) && <p class="muted">情報確認日: {checkedAt(offer)}</p>}
             <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} label="公式サイトで条件を確認" />
@@ -63,8 +63,8 @@ const checkedAt = (offer: Offer) => {
   </section>
   <GuideNav />
 
-  <script is:inline>
-    const allowed = new Set(['all','fiber','home-router','short-stay','work','gaming']);
+  <script is:inline define:vars={{ filterIds }}>
+    const allowed = new Set(['all', ...filterIds]);
     const params = new URLSearchParams(location.search);
     let focus = allowed.has(params.get('focus')) ? params.get('focus') : 'all';
     const cards = [...document.querySelectorAll('[data-offer-card]')];

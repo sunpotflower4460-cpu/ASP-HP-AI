@@ -8,6 +8,7 @@ on:
       - 'data/offers/**'
       - 'data/site.json'
       - 'data/pages.json'
+      - 'data/decision-tags.json'
       - 'astro.config.mjs'
       - 'package.json'
       - 'package-lock.json'

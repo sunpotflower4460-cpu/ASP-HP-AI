@@ -4,11 +4,19 @@ import path from 'node:path';
 const root = process.cwd();
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'data/rules.json'), 'utf8'));
 const pages = JSON.parse(fs.readFileSync(path.join(root, 'data/pages.json'), 'utf8'));
+const decisionTags = JSON.parse(fs.readFileSync(path.join(root, 'data/decision-tags.json'), 'utf8'));
 const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
 const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
-const allowedDecisionTags = new Set(['fiber','home-router','mobile','short-stay','work','gaming','no-construction']);
+const allowedDecisionTags = new Set(decisionTags.map((tag) => tag.id));
+
+const seenTagIds = new Set();
+for (const tag of decisionTags) {
+  if (!tag.id || !tag.label) failures.push('data/decision-tags.json: id/label are required');
+  if (seenTagIds.has(tag.id)) failures.push(`data/decision-tags.json: duplicate id '${tag.id}'`);
+  seenTagIds.add(tag.id);
+}
 
 const seenPageIds = new Set();
 const seenPagePaths = new Set();
@@ -42,6 +50,7 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
     if (offer.affiliateUrl && !validUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use HTTPS`);
     if (offer.officialUrl && !validUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use HTTPS`);
     if (!(offer.allowedMedia || []).includes('web')) failures.push(`${file}: active offer must explicitly allow web`);
+    if (String(offer.asp).toLowerCase() === 'valuecommerce' && (offer.aspProgramId == null || String(offer.aspProgramId).trim() === '')) failures.push(`${file}: active ValueCommerce offer requires aspProgramId`);
   }
   for (const [key, fact] of Object.entries(offer.facts || {})) {
     if (!fact.source || !fact.checkedAt || !fact.ttlDays) failures.push(`${file}: fact ${key} lacks source/checkedAt/ttlDays`);
@@ -74,4 +83,4 @@ if (failures.length) {
   console.error('Validation failed:\n- ' + failures.join('\n- '));
   process.exit(1);
 }
-console.log(`Content validation passed (${titles.size} static page titles checked).`);
+console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered).`);

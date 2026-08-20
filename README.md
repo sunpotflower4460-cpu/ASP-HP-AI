@@ -11,8 +11,9 @@
 - PR表記・事実ソース・情報鮮度・AI呼び出し回数・予算上限をコードで強制
 - `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
+- 案件はAIが勝手にactive化しない
 
-詳しい本番設定は [SETUP.md](./SETUP.md) を参照してください。
+詳しい本番設定は [SETUP.md](./SETUP.md)、実案件登録は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
 
 ## 開始
 ```bash
@@ -27,6 +28,15 @@ npm run freshness
 npm run check
 npm run build
 ```
+`build` はAstro生成後に内部リンク・PR表記・canonical・sitemap・robots等のSmoke Testまで実行します。
+
+## 実案件を登録
+```bash
+npm run offer:new -- --id my-offer --name "サービス名" --asp a8 --affiliate-url "https://..." --official-url "https://..." --summary "公式情報で確認した説明" --tags "home-router"
+npm run offer:check -- my-offer
+npm run offer:activate -- my-offer --confirm-rules-reviewed
+```
+必ずdraftから開始し、ASP/広告主条件を人間が確認した後だけ明示的にactive化します。詳細は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
 
 ## 公開準備チェック
 ```bash
@@ -67,9 +77,10 @@ Cloudflare Workers AIで提案を作る場合のみ:
 AI_EDITOR_ENABLED=true
 CLOUDFLARE_ACCOUNT_ID=...
 CLOUDFLARE_API_TOKEN=...
-CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 npm run editor:ai
 ```
+検索クエリは「信頼できない入力」として扱い、AIへの命令として実行しません。出力はJSON Schemaで制約します。
 
 ### Cost Governor
 `data/budget.json` で月AI予算（初期値300円）と月間AI呼び出し上限（初期値40回）を強制します。AI呼び出しは `data/ai-usage/YYYY-MM.json` に記録されます。
@@ -79,7 +90,7 @@ npm run editor:ai
 - 予測費用が月予算を超える呼び出しは実行前に停止
 - 呼び出し回数上限を超える処理も実行前に停止
 
-`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護されます。
+`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護され、提案後に元ページが変わっていた場合も自動適用しません。
 
 ## 日次パイプライン
 ```bash
@@ -98,3 +109,4 @@ GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` �
 - AIを止めても静的サイトと収益導線は動き続ける
 - 自動編集はSearch Consoleの実データがあるページだけを対象にする
 - 確定収益があるページは自動変更より保護を優先する
+- 案件分類タグは中央レジストリにある確認済み値だけを使う

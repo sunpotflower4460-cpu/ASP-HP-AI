@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,9 @@
     "smoke": "node scripts/site-smoke.mjs",
     "build": "npm run validate && npm run freshness && astro build && npm run smoke",
     "preview": "astro preview",
+    "offer:new": "node scripts/create-offer.mjs",
+    "offer:check": "node scripts/offer-readiness.mjs",
+    "offer:activate": "node scripts/activate-offer.mjs",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
     "a8:import": "node scripts/import-a8.mjs",
     "vc:fetch": "node scripts/fetch-valuecommerce.mjs",
