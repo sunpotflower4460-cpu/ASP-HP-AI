@@ -27,6 +27,9 @@ for (const page of pages) {
   if (seenPageIds.has(page.id)) failures.push(`data/pages.json: duplicate page id '${page.id}'`);
   if (seenPagePaths.has(page.path)) failures.push(`data/pages.json: duplicate page path '${page.path}'`);
   seenPageIds.add(page.id); seenPagePaths.add(page.path);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(page.lastReviewedAt || '')) || Number.isNaN(Date.parse(`${page.lastReviewedAt}T00:00:00Z`))) {
+    failures.push(`data/pages.json: ${page.id} requires valid lastReviewedAt (YYYY-MM-DD)`);
+  }
   const relative = page.path === '/' ? 'index' : page.path.replace(/^\//, '').replace(/\/$/, '');
   const target = path.join(root, 'src/pages', `${relative}.astro`);
   if (!fs.existsSync(target)) failures.push(`data/pages.json: ${page.id} points to missing ${path.relative(root,target)}`);
@@ -85,4 +88,4 @@ if (failures.length) {
   console.error('Validation failed:\n- ' + failures.join('\n- '));
   process.exit(1);
 }
-console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered).`);
+console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered, ${pages.length} review dates checked).`);
