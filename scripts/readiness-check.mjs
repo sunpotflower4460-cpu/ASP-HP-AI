@@ -23,6 +23,29 @@ for (const offer of activeOffers) {
 
 const gscConfigured = Boolean(process.env.GSC_CLIENT_EMAIL && process.env.GSC_PRIVATE_KEY && process.env.GSC_SITE_URL);
 add('gsc', gscConfigured, 'recommended', gscConfigured ? 'Search Console credentials are configured.' : 'Search Console credentials are not configured yet.');
+
+const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const gaTagEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
+const gaPropertyId = String(process.env.GA_PROPERTY_ID || '').trim();
+const gaCredentialsConfigured = Boolean(
+  (process.env.GA_CLIENT_EMAIL || process.env.GSC_CLIENT_EMAIL) &&
+  (process.env.GA_PRIVATE_KEY || process.env.GSC_PRIVATE_KEY)
+);
+const gaApiConfigured = /^\d+$/.test(gaPropertyId) && gaCredentialsConfigured;
+const gaFetchRequired = process.env.GA_FETCH_REQUIRED === 'true';
+if (gaTagEnabled || gaFetchRequired || gaPropertyId) {
+  add(
+    'ga-data-api',
+    gaApiConfigured,
+    gaFetchRequired ? 'required' : 'recommended',
+    gaApiConfigured
+      ? `GA4 Data API is configured for property ${gaPropertyId}.`
+      : 'GA4 browser tracking is enabled/configured, but GA_PROPERTY_ID and Data API credentials are incomplete; AI analysis will not receive affiliate_click data.'
+  );
+} else {
+  add('ga-data-api', true, 'informational', 'GA4 is disabled; no Analytics Data API configuration is required.');
+}
+
 const publicReady = process.env.PUBLIC_READY === 'true';
 add('public-ready', publicReady, 'informational', publicReady ? 'PUBLIC_READY=true: indexing can be enabled.' : 'PUBLIC_READY is false: noindex + robots deny remain active.');
 
