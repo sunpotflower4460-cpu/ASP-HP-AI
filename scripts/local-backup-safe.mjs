@@ -29,13 +29,19 @@ if (!configured) {
 const expanded = configured.startsWith('~/')
   ? path.join(process.env.HOME || '', configured.slice(2))
   : configured;
-const backupRoot = path.resolve(expanded);
+const backupRootCandidate = path.resolve(expanded);
+fs.mkdirSync(backupRootCandidate, { recursive: true, mode: 0o700 });
+const backupRoot = fs.realpathSync(backupRootCandidate);
 const relativeToRepo = path.relative(root, backupRoot);
 if (backupRoot === root || (!relativeToRepo.startsWith('..') && !path.isAbsolute(relativeToRepo))) {
-  throw new Error('LOCAL_BACKUP_DIR must be outside the Git repository.');
+  throw new Error('LOCAL_BACKUP_DIR must resolve outside the Git repository.');
 }
 
-const retentionDays = Math.max(1, Math.min(3650, Number(process.env.LOCAL_BACKUP_RETENTION_DAYS || 30)));
+const retentionDays = Number(process.env.LOCAL_BACKUP_RETENTION_DAYS || 30);
+if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
+  throw new Error('LOCAL_BACKUP_RETENTION_DAYS must be an integer from 1 to 3650.');
+}
+
 const now = new Date();
 const stamp = now.toISOString().replace(/[:.]/g, '-');
 const snapshotDir = path.join(backupRoot, stamp);
@@ -49,10 +55,16 @@ const sources = [
 
 function copyDirectory(source, destination) {
   if (!fs.existsSync(source)) return;
+  const sourceStat = fs.lstatSync(source);
+  if (sourceStat.isSymbolicLink() || !sourceStat.isDirectory()) return;
   fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const src = path.join(source, entry.name);
     const dst = path.join(destination, entry.name);
+    if (entry.isSymbolicLink()) {
+      console.warn(`Skipping symlink in private backup: ${path.relative(root, src)}`);
+      continue;
+    }
     if (entry.isDirectory()) copyDirectory(src, dst);
     else if (entry.isFile()) {
       fs.copyFileSync(src, dst);
@@ -65,6 +77,7 @@ function collectFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) return [];
     return entry.isDirectory() ? collectFiles(full) : entry.isFile() ? [full] : [];
   });
 }
@@ -94,11 +107,14 @@ fs.writeFileSync(path.join(snapshotDir, 'manifest.json'), `${JSON.stringify(mani
 
 const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 for (const entry of fs.readdirSync(backupRoot, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
+  if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/.test(entry.name)) continue;
   const full = path.join(backupRoot, entry.name);
   if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { recursive: true, force: true });
 }
 
-fs.writeFileSync(path.join(backupRoot, 'latest.json'), `${JSON.stringify({ snapshot: snapshotDir, createdAt: now.toISOString(), files: manifest.files.length }, null, 2)}\n`, { mode: 0o600 });
+const latestPayload = `${JSON.stringify({ snapshot: snapshotDir, createdAt: now.toISOString(), files: manifest.files.length }, null, 2)}\n`;
+const latestTemp = path.join(backupRoot, `.latest.${process.pid}.${Date.now()}.tmp`);
+fs.writeFileSync(latestTemp, latestPayload, { mode: 0o600 });
+fs.renameSync(latestTemp, path.join(backupRoot, 'latest.json'));
 console.log(`Private operational snapshot created: ${snapshotDir} (${manifest.files.length} file(s)).`);
