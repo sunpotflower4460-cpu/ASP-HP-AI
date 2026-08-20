@@ -44,19 +44,26 @@ const checkedAt = (offer: Offer) => {
     <h2>現在確認できる提携サービス</h2>
     <p>当サイトで事実情報・情報源・確認日・Web掲載可否を登録済みで、現在activeになっている案件だけを表示します。申込み前には必ず遷移先の公式情報で最新条件をご確認ください。</p>
     {activeOffers.length ? (
-      <div class="offer-list" id="offer-list">
-        {activeOffers.map((offer, index) => (
-          <article class="offer-card" data-offer-card data-tags={(offer.decisionTags || []).join(',')}>
-            <h3>{offer.name}</h3>
-            {typeof offer.facts?.summary?.value === 'string' && <p>{offer.facts.summary.value}</p>}
-            {(offer.decisionTags || []).length > 0 && (
-              <p class="tag-list" aria-label="確認済み条件">{offer.decisionTags!.map((tag) => <span class="tag">{tagLabel.get(tag) || tag}</span>)}</p>
-            )}
-            {checkedAt(offer) && <p class="muted">情報確認日: {checkedAt(offer)}</p>}
-            <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} label="公式サイトで条件を確認" />
-          </article>
-        ))}
-      </div>
+      <>
+        <div class="offer-list" id="offer-list">
+          {activeOffers.map((offer, index) => (
+            <article class="offer-card" data-offer-card data-tags={(offer.decisionTags || []).join(',')}>
+              <h3>{offer.name}</h3>
+              {typeof offer.facts?.summary?.value === 'string' && <p>{offer.facts.summary.value}</p>}
+              {(offer.decisionTags || []).length > 0 && (
+                <p class="tag-list" aria-label="確認済み条件">{offer.decisionTags!.map((tag) => <span class="tag">{tagLabel.get(tag) || tag}</span>)}</p>
+              )}
+              {checkedAt(offer) && <p class="muted">情報確認日: {checkedAt(offer)}</p>}
+              <AffiliateCTA offerId={offer.id} pageId="p010" ctaId="compare_list" positionId={`pos${String(index + 1).padStart(2,'0')}`} label="公式サイトで条件を確認" />
+            </article>
+          ))}
+        </div>
+        <div id="filter-empty" class="notice" hidden>
+          <p><strong>この条件に一致する確認済み案件は、現在まだ登録されていません。</strong></p>
+          <p>無理に別条件の案件をおすすめせず、確認済み候補がある条件だけ表示しています。</p>
+          <button class="filter-chip" id="show-all-offers" type="button">条件を解除してすべて見る</button>
+        </div>
+      </>
     ) : (
       <p>現在は公開準備中です。案件をactiveにすると、確認済みサービスがここへ自動表示されます。</p>
     )}
@@ -70,6 +77,8 @@ const checkedAt = (offer: Offer) => {
     const cards = [...document.querySelectorAll('[data-offer-card]')];
     const buttons = [...document.querySelectorAll('[data-focus]')];
     const status = document.querySelector('#filter-status');
+    const empty = document.querySelector('#filter-empty');
+    const showAll = document.querySelector('#show-all-offers');
     function applyFilter(nextFocus) {
       focus = allowed.has(nextFocus) ? nextFocus : 'all';
       let visible = 0;
@@ -81,11 +90,13 @@ const checkedAt = (offer: Offer) => {
       }
       for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.focus === focus));
       if (status) status.textContent = cards.length ? `${visible}件の確認済み候補を表示しています。` : '';
+      if (empty) empty.hidden = visible > 0 || cards.length === 0;
       const url = new URL(location.href);
       if (focus === 'all') url.searchParams.delete('focus'); else url.searchParams.set('focus', focus);
       history.replaceState(null, '', url);
     }
     for (const button of buttons) button.addEventListener('click', () => applyFilter(button.dataset.focus));
+    if (showAll) showAll.addEventListener('click', () => applyFilter('all'));
     applyFilter(focus);
   </script>
 </BaseLayout>

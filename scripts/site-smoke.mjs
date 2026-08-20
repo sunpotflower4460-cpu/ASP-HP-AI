@@ -1,11 +1,25 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const dist = path.resolve('dist');
 const publicReady = process.env.PUBLIC_READY === 'true';
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+let expectedSiteOrigin = null;
+try { expectedSiteOrigin = new URL(process.env.SITE_URL || '').origin; } catch {}
 const failures = [];
+
+const offerDir = path.resolve('data/offers');
+const offerFiles = fs.existsSync(offerDir) ? fs.readdirSync(offerDir).filter((name) => name.endsWith('.json')) : [];
+const activeOfferIds = new Set(
+  offerFiles
+    .map((name) => JSON.parse(fs.readFileSync(path.join(offerDir, name), 'utf8')))
+    .filter((offer) => offer.status === 'active' && offer.affiliateUrl)
+    .map((offer) => String(offer.id))
+);
 
 if (!fs.existsSync(dist)) {
   console.error('Smoke test requires dist/. Run astro build first.');
@@ -35,6 +49,11 @@ function resolveInternalHref(href) {
   return clean ? path.join(dist, clean, 'index.html') : path.join(dist, 'index.html');
 }
 
+function attr(tag, name) {
+  return tag.match(new RegExp(`\\s${name}=["']([^"']*)["']`, 'i'))?.[1] ?? null;
+}
+
+let renderedAffiliateCtas = 0;
 for (const file of htmlFiles) {
   const html = fs.readFileSync(file, 'utf8');
   const relative = path.relative(dist, file);
@@ -50,12 +69,37 @@ for (const file of htmlFiles) {
   if (!analyticsEnabled && hasGoogleTag) failures.push(`${relative}: Google Analytics tag exists while analytics is disabled`);
   if (analyticsEnabled && !html.includes('affiliate_click')) failures.push(`${relative}: affiliate_click analytics handler is missing`);
 
+  for (const match of html.matchAll(/<a\b[^>]*data-affiliate-click=["']true["'][^>]*>/gi)) {
+    const tag = match[0];
+    renderedAffiliateCtas += 1;
+    const offerId = attr(tag, 'data-offer-id');
+    const pageId = attr(tag, 'data-page-id');
+    const ctaId = attr(tag, 'data-cta-id');
+    const positionId = attr(tag, 'data-position-id');
+    const href = String(attr(tag, 'href') || '').replace(/&amp;/g, '&');
+    const rel = new Set(String(attr(tag, 'rel') || '').toLowerCase().split(/\s+/).filter(Boolean));
+    const target = attr(tag, 'target');
+
+    if (!offerId) failures.push(`${relative}: affiliate CTA is missing data-offer-id`);
+    else if (!activeOfferIds.has(offerId)) failures.push(`${relative}: affiliate CTA rendered for non-active/unknown offer '${offerId}'`);
+    if (!pageId || !ctaId || !positionId) failures.push(`${relative}: affiliate CTA '${offerId || '?'}' is missing attribution IDs`);
+    if (!isSafeHttpsUrl(href)) failures.push(`${relative}: affiliate CTA '${offerId || '?'}' has unsafe href`);
+    for (const requiredRel of ['sponsored', 'nofollow', 'noopener']) {
+      if (!rel.has(requiredRel)) failures.push(`${relative}: affiliate CTA '${offerId || '?'}' is missing rel=${requiredRel}`);
+    }
+    if (target !== '_blank') failures.push(`${relative}: affiliate CTA '${offerId || '?'}' should use target=_blank`);
+  }
+
   for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
     const href = match[1];
     const target = resolveInternalHref(href);
     if (!target) continue;
     if (!fs.existsSync(target)) failures.push(`${relative}: broken internal href ${href}`);
   }
+}
+
+if (renderedAffiliateCtas > 0 && activeOfferIds.size === 0) {
+  failures.push('affiliate CTA rendered even though there are no active offers');
 }
 
 if (fs.existsSync(path.join(dist, 'robots.txt'))) {
@@ -71,6 +115,17 @@ if (fs.existsSync(path.join(dist, 'health.json'))) {
     const health = JSON.parse(fs.readFileSync(path.join(dist, 'health.json'), 'utf8'));
     if (health.status !== 'ok') failures.push('health.json status is not ok');
     if (Boolean(health.publicReady) !== publicReady) failures.push('health.json publicReady does not match build mode');
+    if (health.version !== pkg.version) failures.push(`health.json version '${health.version ?? '<missing>'}' does not match package.json '${pkg.version}'`);
+    if (!Number.isFinite(Date.parse(String(health.generatedAt || '')))) failures.push('health.json generatedAt is missing or invalid');
+    if (expectedSiteOrigin && health.siteOrigin !== expectedSiteOrigin) {
+      failures.push(`health.json siteOrigin '${health.siteOrigin ?? '<missing>'}' does not match SITE_URL origin '${expectedSiteOrigin}'`);
+    }
+    if (process.env.CF_PAGES_BRANCH && health.branch !== process.env.CF_PAGES_BRANCH) {
+      failures.push(`health.json branch '${health.branch ?? '<missing>'}' does not match CF_PAGES_BRANCH '${process.env.CF_PAGES_BRANCH}'`);
+    }
+    if (process.env.CF_PAGES_COMMIT_SHA && health.commitSha !== process.env.CF_PAGES_COMMIT_SHA) {
+      failures.push('health.json commitSha does not match CF_PAGES_COMMIT_SHA');
+    }
   } catch (error) {
     failures.push(`health.json is invalid JSON: ${error.message}`);
   }
@@ -87,4 +142,4 @@ if (failures.length) {
   console.error('Site smoke test failed:\n- ' + [...new Set(failures)].join('\n- '));
   process.exit(1);
 }
-console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked, analytics=${analyticsEnabled ? 'on' : 'off'}).`);
+console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked, affiliateCTAs=${renderedAffiliateCtas}, activeOffers=${activeOfferIds.size}, analytics=${analyticsEnabled ? 'on' : 'off'}, version=${pkg.version}).`);

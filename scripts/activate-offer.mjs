@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { evaluateOffer, loadOffer } from './lib/offer-tools.mjs';
@@ -25,16 +26,25 @@ if (!result.ready) {
 }
 
 const original = fs.readFileSync(file, 'utf8');
-const next = { ...offer, status: 'active', activatedAt: new Date().toISOString() };
+const next = {
+  ...offer,
+  status: 'active',
+  activatedAt: new Date().toISOString(),
+  pausedAt: null,
+  pauseReason: null
+};
 fs.writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
 
-function run(script) {
-  return spawnSync(process.execPath, [script], { stdio: 'inherit', env: process.env });
-}
-const validate = run('scripts/validate-content.mjs');
-const freshness = validate.status === 0 ? run('scripts/check-freshness.mjs') : validate;
-if (validate.status !== 0 || freshness.status !== 0) {
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const verify = spawnSync(npmCommand, ['run', 'verify'], {
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    VERIFY_PRODUCTION: process.env.PUBLIC_READY === 'true' ? 'true' : 'false'
+  }
+});
+if (verify.status !== 0) {
   fs.writeFileSync(file, original);
-  throw new Error(`Activation rolled back because validation failed for '${id}'.`);
+  throw new Error(`Activation rolled back because full-site verification failed for '${id}'.`);
 }
-console.log(`Activated '${id}'. Run npm run build before public deployment.`);
+console.log(`Activated '${id}' after full-site verification. Deploy only through the normal Cloudflare build gate.`);

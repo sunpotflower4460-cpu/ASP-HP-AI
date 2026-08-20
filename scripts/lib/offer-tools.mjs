@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSafeHttpsUrl } from './url-safety.mjs';
 
 export const offerDir = path.join(process.cwd(), 'data', 'offers');
 export const decisionTags = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'decision-tags.json'), 'utf8'));
@@ -14,7 +15,7 @@ export function jstDate() {
 }
 
 export function validHttps(value) {
-  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+  return isSafeHttpsUrl(value);
 }
 
 export function offerPath(id) {
@@ -32,13 +33,14 @@ export function evaluateOffer(offer) {
   const checks = [];
   const add = (id, ok, level, message) => checks.push({ id, ok: Boolean(ok), level, message });
   const asp = String(offer.asp || '').toLowerCase();
+  const todayJst = jstDate();
 
   add('id', /^[a-z0-9][a-z0-9_-]{1,63}$/.test(String(offer.id || '')), 'required', 'Stable lowercase offer id.');
   add('name', Boolean(String(offer.name || '').trim()), 'required', 'Offer name is present.');
   add('asp', ['a8','valuecommerce'].includes(asp), 'required', 'V1 supports A8 or ValueCommerce.');
   add('status', ['draft','active','paused'].includes(String(offer.status || '')), 'required', 'Status must be draft/active/paused.');
-  add('affiliate-url', validHttps(offer.affiliateUrl) && !String(offer.affiliateUrl || '').includes('example.com'), 'required', 'Affiliate URL must be a real HTTPS URL.');
-  add('official-url', validHttps(offer.officialUrl) && !String(offer.officialUrl || '').includes('example.com'), 'required', 'Official URL must be a real HTTPS URL.');
+  add('affiliate-url', validHttps(offer.affiliateUrl), 'required', 'Affiliate URL must be a real HTTPS URL without embedded credentials/placeholders/local hosts.');
+  add('official-url', validHttps(offer.officialUrl), 'required', 'Official URL must be a real HTTPS URL without embedded credentials/placeholders/local hosts.');
   add('web-media', (offer.allowedMedia || []).includes('web'), 'required', 'Web media must be explicitly allowed for this offer.');
 
   const tags = offer.decisionTags || [];
@@ -52,11 +54,13 @@ export function evaluateOffer(offer) {
   add('facts', facts.length > 0, 'required', 'At least one sourced fact is required.');
   add('summary', typeof offer.facts?.summary?.value === 'string' && offer.facts.summary.value.trim().length >= 10, 'required', 'A useful sourced summary is required.');
   for (const [key, fact] of facts) {
-    add(`fact-source:${key}`, validHttps(fact?.source) && !String(fact?.source || '').includes('example.com'), 'required', `${key}: real HTTPS source.`);
-    const checked = Date.parse(`${fact?.checkedAt || ''}T00:00:00Z`);
+    add(`fact-source:${key}`, validHttps(fact?.source), 'required', `${key}: real HTTPS source.`);
+    const checkedAt = String(fact?.checkedAt || '');
+    const checked = Date.parse(`${checkedAt}T00:00:00Z`);
     const ttl = Number(fact?.ttlDays || 0);
     const expires = checked + ttl * 86400000;
-    add(`fact-date:${key}`, Number.isFinite(checked) && ttl > 0, 'required', `${key}: checkedAt and positive ttlDays.`);
+    add(`fact-date:${key}`, /^\d{4}-\d{2}-\d{2}$/.test(checkedAt) && Number.isFinite(checked) && ttl > 0, 'required', `${key}: checkedAt and positive ttlDays.`);
+    add(`fact-not-future:${key}`, Boolean(checkedAt) && checkedAt <= todayJst, 'required', `${key}: checkedAt cannot be later than today in JST (${todayJst}).`);
     add(`fact-fresh:${key}`, Number.isFinite(expires) && Date.now() <= expires, 'required', `${key}: fact is still inside its TTL.`);
   }
 

@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -14,7 +15,7 @@ if (!report) {
 function pageUrlToFile(target) {
   if (!target) return null;
   try {
-    const base = site.url || process.env.SITE_URL || 'https://example.com';
+    const base = process.env.SITE_URL || site.url || 'https://example.com';
     const pathname = new URL(target, base).pathname.replace(/\/+$/, '') || '/';
     if (pathname === '/') return 'src/pages/index.astro';
     const candidate = path.join('src/pages', `${pathname.replace(/^\//, '')}.astro`);
@@ -84,8 +85,11 @@ for (const action of report.nextActions || []) {
       outboundClicksPerSearchClick: commercial?.outboundClicksPerSearchClick ?? null,
       commercialIntentScore: Number(commercial?.intentScore ?? opportunity?.commercialIntentScore ?? 0),
       commercialIntentClass: commercial?.intentClass ?? opportunity?.commercialIntentClass ?? 'weak',
-      confirmedYen: Number(commercial?.confirmedYen || 0),
-      pendingYen: Number(commercial?.pendingYen || 0)
+      confirmedYen: Number(commercial?.confirmedYen ?? opportunity?.confirmedYen ?? 0),
+      pendingYen: Number(commercial?.pendingYen || 0),
+      confirmedYenPerSearchClick: commercial?.confirmedYenPerSearchClick ?? opportunity?.confirmedYenPerSearchClick ?? null,
+      confirmedYenPerAffiliateClick: commercial?.confirmedYenPerAffiliateClick ?? opportunity?.confirmedYenPerAffiliateClick ?? null,
+      pendingYenPerAffiliateClick: commercial?.pendingYenPerAffiliateClick ?? null
     }
   });
 }

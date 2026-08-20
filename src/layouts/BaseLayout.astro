@@ -31,6 +31,12 @@ const structuredData = {
     }
   ]
 };
+// JSON-LD is inserted as raw script content. Escape HTML-significant characters so
+// operator-controlled text can never terminate the script element.
+const structuredDataJson = JSON.stringify(structuredData)
+  .replace(/</g, '\\u003c')
+  .replace(/>/g, '\\u003e')
+  .replace(/&/g, '\\u0026');
 const analyticsScript = analyticsEnabled ? `
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
@@ -64,7 +70,7 @@ document.addEventListener('click', function(event) {
     <meta property="og:url" content={canonical.toString()} />
     <meta name="twitter:card" content="summary" />
     {!publicReady && <meta name="robots" content="noindex,nofollow" />}
-    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+    <script type="application/ld+json" set:html={structuredDataJson} />
     {analyticsEnabled && <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}></script>}
     {analyticsEnabled && <script is:inline set:html={analyticsScript}></script>}
   </head>

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { acquireRunLock } from './lib/run-lock.mjs';
 
 const root = process.cwd();
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -30,6 +31,7 @@ if (process.env.LOCAL_AUTOMATION_ENABLED !== 'true') {
 
 const targetBranch = process.env.LOCAL_AUTOMATION_BRANCH || 'main';
 const autoPush = process.env.LOCAL_AUTO_PUSH === 'true';
+const remoteSmokeAfterPush = process.env.REMOTE_SMOKE_AFTER_PUSH === 'true';
 fs.mkdirSync(path.join(root, 'logs'), { recursive: true });
 
 function run(command, args, options = {}) {
@@ -45,27 +47,78 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function capture(command, args) {
-  const result = run(command, args, { capture: true });
-  return String(result.stdout || '').trim();
+function capture(command, args, { allowFailure = false } = {}) {
+  const result = run(command, args, { capture: true, allowFailure });
+  return { status: result.status ?? 1, stdout: String(result.stdout || '').trim(), stderr: String(result.stderr || '').trim() };
 }
 
-const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+function stable(value) {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function strippedPauseFields(value) {
+  const clone = JSON.parse(JSON.stringify(value));
+  delete clone.status;
+  delete clone.pausedAt;
+  delete clone.pauseReason;
+  return clone;
+}
+
+function isSafeAutomatedOfferPause(file) {
+  if (!/^data\/offers\/[^/]+\.json$/.test(file)) return false;
+  const previous = capture('git', ['show', `HEAD:${file}`], { allowFailure: true });
+  if (previous.status !== 0) return false;
+  const currentPath = path.join(root, file);
+  if (!fs.existsSync(currentPath)) return false;
+  try {
+    const before = JSON.parse(previous.stdout);
+    const after = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
+    if (before.status !== 'active' || after.status !== 'paused') return false;
+    if (!String(after.pauseReason || '').startsWith('auto safety pause:')) return false;
+    if (!Number.isFinite(Date.parse(after.pausedAt || ''))) return false;
+    return stable(strippedPauseFields(before)) === stable(strippedPauseFields(after));
+  } catch {
+    return false;
+  }
+}
+
+const runLock = acquireRunLock({
+  lockPath: path.join(root, 'logs', 'local-daily.lock'),
+  maxAgeHours: Number(process.env.LOCAL_RUN_LOCK_MAX_AGE_HOURS || 6),
+  metadata: { targetBranch, autoPush, remoteSmokeAfterPush }
+});
+console.log(`Local daily lock acquired: ${runLock.runId}`);
+
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  process.once(signal, () => {
+    runLock.release();
+    process.exit(code);
+  });
+}
+
+const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']).stdout;
 if (branch !== targetBranch) throw new Error(`Local automation only runs on '${targetBranch}', current branch is '${branch}'.`);
 
-const dirty = capture('git', ['status', '--porcelain']);
+const dirty = capture('git', ['status', '--porcelain']).stdout;
 if (dirty) throw new Error('Working tree is not clean. Local automation will not overwrite human changes.');
 
 run('git', ['pull', '--ff-only', 'origin', targetBranch]);
+run(npmCommand, ['run', 'local:permissions']);
+run(npmCommand, ['run', 'local:doctor']);
+
+// Safety scan may only move an existing active offer to paused. It never edits
+// facts, URLs, tags or activates anything.
+run(npmCommand, ['run', 'offer:safety-scan']);
 
 const a8Import = process.env.A8_AUTO_IMPORT_FILE?.trim();
 if (a8Import) {
   const resolved = path.isAbsolute(a8Import) ? a8Import : path.join(root, a8Import);
-  if (fs.existsSync(resolved)) {
-    run(npmCommand, ['run', 'a8:import', '--', resolved]);
-  } else {
-    console.warn(`A8_AUTO_IMPORT_FILE does not exist; continuing without A8 refresh: ${resolved}`);
-  }
+  if (fs.existsSync(resolved)) run(npmCommand, ['run', 'a8:import', '--', resolved]);
+  else console.warn(`A8_AUTO_IMPORT_FILE does not exist; continuing without A8 refresh: ${resolved}`);
 }
 
 run(npmCommand, ['run', 'daily']);
@@ -73,31 +126,97 @@ process.env.VERIFY_PRODUCTION = process.env.PUBLIC_READY === 'true' ? 'true' : '
 run(npmCommand, ['run', 'verify']);
 run(npmCommand, ['run', 'ops:summary']);
 
-// This repository is public. Search queries, analytics, ASP revenue, AI usage and
-// operations reports remain local-only via .gitignore. Only public site source
-// edits are eligible for autonomous commit/push.
-const allowlistedPaths = ['src/pages'];
-for (const target of allowlistedPaths) {
-  if (fs.existsSync(path.join(root, target))) run('git', ['add', '--', target]);
+// Operational observations are intentionally local-only because this repository is public.
+// If configured, snapshot them outside the repository before any public source is committed.
+const backupRequired = process.env.LOCAL_BACKUP_REQUIRED === 'true';
+const backupDir = process.env.LOCAL_BACKUP_DIR?.trim();
+if (backupRequired && !backupDir) {
+  throw new Error('LOCAL_BACKUP_REQUIRED=true but LOCAL_BACKUP_DIR is empty. Autonomous public-content commit is blocked.');
+}
+if (backupDir) {
+  const backup = run(npmCommand, ['run', 'local:backup'], { allowFailure: true });
+  if (backup.status !== 0) {
+    const message = 'Private operational-data backup failed.';
+    if (backupRequired) throw new Error(`${message} LOCAL_BACKUP_REQUIRED=true, so autonomous public-content commit is blocked.`);
+    console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
+  } else {
+    const backupVerify = run(npmCommand, ['run', 'local:backup:verify'], { allowFailure: true });
+    if (backupVerify.status !== 0) {
+      const message = 'Private backup integrity verification failed.';
+      if (backupRequired) throw new Error(`${message} Autonomous public-content commit is blocked.`);
+      console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
+    }
+  }
 }
 
-const staged = capture('git', ['diff', '--cached', '--name-only']);
+// No autonomous script is allowed to create untracked repository files. Local
+// operational outputs belong under ignored paths and therefore do not appear here.
+const unexpectedUntracked = capture('git', ['ls-files', '--others', '--exclude-standard']).stdout
+  .split(/\r?\n/)
+  .filter(Boolean);
+if (unexpectedUntracked.length) {
+  throw new Error(`Refusing autonomous commit because unexpected untracked files were created:\n${unexpectedUntracked.join('\n')}`);
+}
+
+// Page automation is modification-only. New pages, deletions, renames and copies
+// require human review even when they live under src/pages.
+const pageChanges = capture('git', ['diff', '--name-status', '--', 'src/pages']).stdout
+  .split(/\r?\n/)
+  .filter(Boolean);
+const unsafePageChanges = pageChanges.filter((line) => {
+  const status = line.split(/\s+/)[0] || '';
+  return status !== 'M';
+});
+if (unsafePageChanges.length) {
+  throw new Error(`Refusing autonomous commit because page changes were not modification-only:\n${unsafePageChanges.join('\n')}`);
+}
+
+// This repository is public. Search queries, analytics, ASP revenue, AI usage and
+// operations reports remain local-only. Autonomous commits may contain only:
+// 1) existing public page modifications, and 2) semantically verified active -> paused safety changes.
+const publicPagePrefix = 'src/pages';
+const trackedChanged = capture('git', ['diff', '--name-only']).stdout.split(/\r?\n/).filter(Boolean);
+const safeOfferFiles = [];
+const unexpectedTracked = [];
+for (const file of trackedChanged) {
+  if (file === publicPagePrefix || file.startsWith(`${publicPagePrefix}/`)) continue;
+  if (isSafeAutomatedOfferPause(file)) {
+    safeOfferFiles.push(file);
+    continue;
+  }
+  unexpectedTracked.push(file);
+}
+if (unexpectedTracked.length) {
+  throw new Error(`Refusing autonomous commit because tracked files changed outside the allowed page/safety-pause rules:\n${unexpectedTracked.join('\n')}`);
+}
+
+if (fs.existsSync(path.join(root, publicPagePrefix))) run('git', ['add', '--', publicPagePrefix]);
+for (const file of safeOfferFiles) run('git', ['add', '--', file]);
+
+const staged = capture('git', ['diff', '--cached', '--name-only']).stdout;
 if (!staged) {
-  console.log('No public site changes to commit. Operational observations remain local-only.');
+  console.log('No public page or safe offer-pause changes to commit. Operational observations remain local-only.');
   process.exit(0);
 }
 
-const allowed = staged.split(/\r?\n/).filter(Boolean).every((file) =>
-  allowlistedPaths.some((prefix) => file === prefix || file.startsWith(`${prefix}/`))
-);
-if (!allowed) throw new Error(`Refusing commit because staged files escaped public-content allowlist:\n${staged}`);
+const stagedFiles = staged.split(/\r?\n/).filter(Boolean);
+for (const file of stagedFiles) {
+  const isPage = file === publicPagePrefix || file.startsWith(`${publicPagePrefix}/`);
+  const isSafePause = safeOfferFiles.includes(file) && isSafeAutomatedOfferPause(file);
+  if (!isPage && !isSafePause) {
+    throw new Error(`Refusing commit because staged file escaped autonomous rules: ${file}`);
+  }
+}
 
 const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
-run('git', ['commit', '-m', `chore: autonomous site update ${date}`]);
+run('git', ['commit', '-m', `chore: autonomous safety/content update ${date}`]);
 
 if (autoPush) {
   run('git', ['push', 'origin', targetBranch]);
-  console.log('Autonomous public-content update pushed. Cloudflare Pages Git integration will run the deployment gate.');
+  console.log('Autonomous safe update pushed. Cloudflare Pages Git integration will run the deployment gate.');
+  if (remoteSmokeAfterPush) {
+    run(npmCommand, ['run', 'remote:wait']);
+  }
 } else {
-  console.log('Autonomous public-content update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
+  console.log('Autonomous safe update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
 }

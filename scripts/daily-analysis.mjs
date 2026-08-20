@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import { scoreCommercialIntent, classifyCommercialIntent } from './lib/commercial-intent.mjs';
 
@@ -98,10 +99,18 @@ const commercialSignals = [...allSignalPaths].map((pagePath) => {
     confirmedYen: revenue.confirmedYen,
     pendingYen: revenue.pendingYen,
     rejectedYen: revenue.rejectedYen,
+    confirmedYenPerSearchClick: search.clicks > 0 ? Number((revenue.confirmedYen / search.clicks).toFixed(2)) : null,
+    confirmedYenPerAffiliateClick: affiliateClicks > 0 ? Number((revenue.confirmedYen / affiliateClicks).toFixed(2)) : null,
+    pendingYenPerAffiliateClick: affiliateClicks > 0 ? Number((revenue.pendingYen / affiliateClicks).toFixed(2)) : null,
     intentScore: score,
     intentClass: className
   };
-}).sort((a, b) => b.intentScore - a.intentScore || b.affiliateClicks - a.affiliateClicks);
+}).sort((a, b) =>
+  (b.confirmedYen - a.confirmedYen) ||
+  (b.pendingYen - a.pendingYen) ||
+  (b.intentScore - a.intentScore) ||
+  (b.affiliateClicks - a.affiliateClicks)
+);
 const signalByPath = new Map(commercialSignals.map((row) => [row.pagePath, row]));
 
 const opportunities = usableGscRows
@@ -118,13 +127,20 @@ const opportunities = usableGscRows
       ctr: Number(row.ctr || 0),
       position: Number(row.position || 0),
       affiliateClicks: signal?.affiliateClicks || 0,
+      confirmedYen: signal?.confirmedYen || 0,
+      confirmedYenPerSearchClick: signal?.confirmedYenPerSearchClick ?? null,
+      confirmedYenPerAffiliateClick: signal?.confirmedYenPerAffiliateClick ?? null,
       commercialIntentScore: signal?.intentScore || 0,
       commercialIntentClass: signal?.intentClass || 'weak'
     };
   })
   .filter((r) => r.impressions >= 10 && r.position >= 4 && r.position <= 20)
   .map((r) => ({ ...r, action: r.impressions >= 20 && r.ctr < 0.03 ? 'REVIEW_TITLE' : 'REVIEW_CONTENT' }))
-  .sort((a, b) => (b.commercialIntentScore - a.commercialIntentScore) || (b.impressions - a.impressions))
+  .sort((a, b) =>
+    (b.confirmedYen - a.confirmedYen) ||
+    (b.commercialIntentScore - a.commercialIntentScore) ||
+    (b.impressions - a.impressions)
+  )
   .slice(0, 30);
 
 const winners = affiliatePaths.filter((x) => x.confirmedYen > 0);
@@ -145,7 +161,7 @@ const nextActions = [
   ...pending.slice(0, 5).map((x) => ({ type: 'MONITOR_PENDING', target: pageIdToUrl(x.pageId) || x.offerId || x.programName, pageId: x.pageId || null, priority: 90, reason: `pending reward ¥${x.pendingYen}` })),
   ...strongUnconfirmed.map((x) => ({ type: 'AMPLIFY_COMMERCIAL_INTENT', target: x.page, pagePath: x.pagePath, priority: 75 + Math.min(15, Math.floor(x.intentScore / 10)), intentScore: x.intentScore, affiliateClicks: x.affiliateClicks, reason: `${x.affiliateClicks} outbound click(s), no confirmed reward yet` })),
   ...outboundGaps.map((x) => ({ type: 'IMPROVE_OUTBOUND', target: x.page, pagePath: x.pagePath, priority: 70, intentScore: x.intentScore, searchClicks: x.searchClicks, reason: `${x.searchClicks} search click(s) but 0 outbound affiliate clicks` })),
-  ...opportunities.slice(0, 15).map((x) => ({ type: x.action, target: x.page, query: x.query, priority: 40 + Math.min(25, Math.floor(x.commercialIntentScore / 4)), protectedByRevenue: protectedUrls.has(x.page), affiliateClicks: x.affiliateClicks, intentScore: x.commercialIntentScore }))
+  ...opportunities.slice(0, 15).map((x) => ({ type: x.action, target: x.page, query: x.query, priority: 40 + Math.min(25, Math.floor(x.commercialIntentScore / 4)), protectedByRevenue: protectedUrls.has(x.page), affiliateClicks: x.affiliateClicks, intentScore: x.commercialIntentScore, confirmedYen: x.confirmedYen }))
 ].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
 
 const report = {

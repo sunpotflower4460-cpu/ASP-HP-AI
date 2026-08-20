@@ -9,6 +9,9 @@ export type Offer = {
   rewardYen?: number | null;
   allowedMedia?: string[];
   decisionTags?: string[];
+  activatedAt?: string | null;
+  pausedAt?: string | null;
+  pauseReason?: string | null;
   facts?: Record<string, {
     value: unknown;
     source: string;
@@ -18,7 +21,7 @@ export type Offer = {
 };
 
 const modules = import.meta.glob('../../data/offers/*.json', { eager: true, import: 'default' }) as Record<string, Offer>;
-const offers: Offer[] = Object.values(modules);
+const offers: Offer[] = Object.values(modules).sort((a, b) => String(a.id).localeCompare(String(b.id), 'en'));
 
 export function getOffer(id: string): Offer | undefined {
   return offers.find((offer) => offer.id === id);

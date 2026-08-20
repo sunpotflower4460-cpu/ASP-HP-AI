@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -42,6 +43,9 @@ function run(name, args, extraEnv = {}) {
   }
 }
 
+run('URL safety test', ['run', 'url-safety-test']);
+run('Local run-lock test', ['run', 'run-lock-test']);
+run('Private backup restore test', ['run', 'backup-restore-test']);
 run('Deterministic analysis self-test', ['run', 'self-test']);
 run('Tracked secret scan', ['run', 'security']);
 run(production ? 'Strict launch readiness' : 'Launch readiness report', ['run', 'readiness'], production ? { READINESS_STRICT: 'true' } : {});

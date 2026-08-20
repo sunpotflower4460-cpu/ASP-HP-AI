@@ -1,5 +1,7 @@
+import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const root = process.cwd();
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'data/rules.json'), 'utf8'));
@@ -8,7 +10,13 @@ const decisionTags = JSON.parse(fs.readFileSync(path.join(root, 'data/decision-t
 const offerDir = path.join(root, 'data/offers');
 const failures = [];
 const warnings = [];
-const validUrl = (value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } };
+const todayJst = (() => {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+})();
 const allowedDecisionTags = new Set(decisionTags.map((tag) => tag.id));
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 if (gaMeasurementId && !/^G-[A-Z0-9]+$/i.test(gaMeasurementId)) failures.push('PUBLIC_GA_MEASUREMENT_ID must look like G-XXXXXXXXXX or be empty');
@@ -27,8 +35,11 @@ for (const page of pages) {
   if (seenPageIds.has(page.id)) failures.push(`data/pages.json: duplicate page id '${page.id}'`);
   if (seenPagePaths.has(page.path)) failures.push(`data/pages.json: duplicate page path '${page.path}'`);
   seenPageIds.add(page.id); seenPagePaths.add(page.path);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(page.lastReviewedAt || '')) || Number.isNaN(Date.parse(`${page.lastReviewedAt}T00:00:00Z`))) {
+  const reviewed = String(page.lastReviewedAt || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reviewed) || Number.isNaN(Date.parse(`${reviewed}T00:00:00Z`))) {
     failures.push(`data/pages.json: ${page.id} requires valid lastReviewedAt (YYYY-MM-DD)`);
+  } else if (reviewed > todayJst) {
+    failures.push(`data/pages.json: ${page.id} lastReviewedAt cannot be in the future (${reviewed} > ${todayJst} JST)`);
   }
   const relative = page.path === '/' ? 'index' : page.path.replace(/^\//, '').replace(/\/$/, '');
   const target = path.join(root, 'src/pages', `${relative}.astro`);
@@ -52,14 +63,21 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
   if (offer.status === 'active') {
     if (!offer.affiliateUrl) failures.push(`${file}: active offer requires affiliateUrl`);
     if (!offer.officialUrl) failures.push(`${file}: active offer requires officialUrl`);
-    if (offer.affiliateUrl && !validUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use HTTPS`);
-    if (offer.officialUrl && !validUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use HTTPS`);
+    if (offer.affiliateUrl && !isSafeHttpsUrl(offer.affiliateUrl)) failures.push(`${file}: affiliateUrl must use a real HTTPS URL without embedded credentials/placeholders/local hosts`);
+    if (offer.officialUrl && !isSafeHttpsUrl(offer.officialUrl)) failures.push(`${file}: officialUrl must use a real HTTPS URL without embedded credentials/placeholders/local hosts`);
     if (!(offer.allowedMedia || []).includes('web')) failures.push(`${file}: active offer must explicitly allow web`);
     if (String(offer.asp).toLowerCase() === 'valuecommerce' && (offer.aspProgramId == null || String(offer.aspProgramId).trim() === '')) failures.push(`${file}: active ValueCommerce offer requires aspProgramId`);
   }
   for (const [key, fact] of Object.entries(offer.facts || {})) {
     if (!fact.source || !fact.checkedAt || !fact.ttlDays) failures.push(`${file}: fact ${key} lacks source/checkedAt/ttlDays`);
-    if (fact.source && !validUrl(fact.source)) failures.push(`${file}: fact ${key} source must use HTTPS`);
+    if (fact.source && offer.status === 'active' && !isSafeHttpsUrl(fact.source)) failures.push(`${file}: active fact ${key} source must use a real HTTPS URL without placeholders/local hosts`);
+    else if (fact.source && offer.status !== 'active' && !isSafeHttpsUrl(fact.source, { allowPlaceholder: true })) failures.push(`${file}: fact ${key} source must use safe HTTPS`);
+    const checkedAt = String(fact.checkedAt || '');
+    if (checkedAt && (!/^\d{4}-\d{2}-\d{2}$/.test(checkedAt) || Number.isNaN(Date.parse(`${checkedAt}T00:00:00Z`)))) {
+      failures.push(`${file}: fact ${key} checkedAt must be YYYY-MM-DD`);
+    } else if (checkedAt && checkedAt > todayJst) {
+      failures.push(`${file}: fact ${key} checkedAt cannot be in the future (${checkedAt} > ${todayJst} JST)`);
+    }
   }
   if (!['a8','valuecommerce'].includes(String(offer.asp).toLowerCase())) warnings.push(`${file}: ASP '${offer.asp}' has no built-in adapter yet`);
 }
@@ -88,4 +106,4 @@ if (failures.length) {
   console.error('Validation failed:\n- ' + failures.join('\n- '));
   process.exit(1);
 }
-console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered, ${pages.length} review dates checked).`);
+console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered, ${pages.length} review dates checked; today=${todayJst} JST).`);

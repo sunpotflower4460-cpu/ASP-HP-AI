@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { scoreCommercialIntent, classifyCommercialIntent } from './lib/commercial-intent.mjs';
+import { evaluateOffer } from './lib/offer-tools.mjs';
 
 const zero = scoreCommercialIntent({});
 assert.equal(zero, 0, 'empty signal should score 0');
@@ -18,4 +23,149 @@ assert.equal(classifyCommercialIntent({ score: confirmed, confirmedYen: 9000 }),
 const capped = scoreCommercialIntent({ searchClicks: 1, affiliateClicks: 100000, confirmedYen: 999999 });
 assert.ok(capped <= 100, `score must be capped at 100, got ${capped}`);
 
-console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}.`);
+const validAffiliateUrl = 'https://affiliate.example-service.jp/click';
+const validOfficialUrl = 'https://service.example-service.jp/';
+const validFactUrl = 'https://service.example-service.jp/fact';
+const futureDate = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+const futureFactOffer = evaluateOffer({
+  id: 'future_fact_test',
+  name: 'Future fact test offer',
+  asp: 'a8',
+  status: 'draft',
+  affiliateUrl: validAffiliateUrl,
+  officialUrl: validOfficialUrl,
+  allowedMedia: ['web'],
+  decisionTags: ['home-router'],
+  facts: {
+    summary: {
+      value: '公式情報を確認した説明文として十分な長さのテストです。',
+      source: validFactUrl,
+      checkedAt: futureDate,
+      ttlDays: 30
+    }
+  }
+});
+assert.equal(futureFactOffer.ready, false, 'future-dated fact must make an offer not ready');
+assert.ok(
+  futureFactOffer.requiredFailures.some((item) => item.id === 'fact-not-future:summary'),
+  'future-dated fact guard must be reported explicitly'
+);
+
+const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asp-hp-ai-selftest-'));
+const fixtureRepo = path.join(fixtureRoot, 'repo');
+const backupRoot = path.join(fixtureRoot, 'private-backups');
+for (const relative of [
+  'data/search-console',
+  'data/analytics',
+  'data/affiliate',
+  'data/offers',
+  'reports'
+]) fs.mkdirSync(path.join(fixtureRepo, relative), { recursive: true });
+
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), '{"rows":[]}\n');
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'analytics', 'latest.json'), '{"rows":[]}\n');
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'affiliate', 'normalized-latest.json'), '{"totals":{}}\n');
+fs.writeFileSync(path.join(fixtureRepo, 'reports', 'latest.json'), '{"ok":true}\n');
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'decision-tags.json'), JSON.stringify([
+  { id: 'home-router', label: 'Home router', filter: true }
+], null, 2));
+
+const backupScript = path.resolve('scripts/local-backup-safe.mjs');
+const verifyBackupScript = path.resolve('scripts/local-backup-verify.mjs');
+const backupEnv = {
+  ...process.env,
+  LOCAL_BACKUP_DIR: backupRoot,
+  LOCAL_BACKUP_RETENTION_DAYS: '30'
+};
+const backupResult = spawnSync(process.execPath, [backupScript], { cwd: fixtureRepo, env: backupEnv, encoding: 'utf8' });
+assert.equal(backupResult.status, 0, `local backup should succeed: ${backupResult.stderr || backupResult.stdout}`);
+assert.ok(fs.existsSync(path.join(backupRoot, 'latest.json')), 'backup latest.json should exist');
+const backupVerifyResult = spawnSync(process.execPath, [verifyBackupScript], { cwd: fixtureRepo, env: backupEnv, encoding: 'utf8' });
+assert.equal(backupVerifyResult.status, 0, `local backup verification should succeed: ${backupVerifyResult.stderr || backupVerifyResult.stdout}`);
+const unsafeBackupResult = spawnSync(process.execPath, [backupScript], {
+  cwd: fixtureRepo,
+  env: { ...process.env, LOCAL_BACKUP_DIR: path.join(fixtureRepo, 'unsafe-backup') },
+  encoding: 'utf8'
+});
+assert.notEqual(unsafeBackupResult.status, 0, 'backup inside public repository must be rejected');
+
+// Offer Safety Pause: expired active pauses, valid active stays active, draft stays draft.
+const safetyScript = path.resolve('scripts/offer-safety-scan.mjs');
+const today = new Date().toISOString().slice(0, 10);
+const oldDate = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+const baseOffer = {
+  asp: 'a8',
+  affiliateUrl: validAffiliateUrl,
+  officialUrl: validOfficialUrl,
+  allowedMedia: ['web'],
+  decisionTags: ['home-router']
+};
+const writeOffer = (name, offer) => fs.writeFileSync(
+  path.join(fixtureRepo, 'data', 'offers', name),
+  `${JSON.stringify(offer, null, 2)}\n`
+);
+const summaryFact = (checkedAt, ttlDays) => ({
+  summary: {
+    value: '公式情報を確認した説明文として十分な長さの安全テストです。',
+    source: validFactUrl,
+    checkedAt,
+    ttlDays
+  }
+});
+writeOffer('unsafe.json', { ...baseOffer, id: 'unsafe_offer', name: 'Unsafe active offer', status: 'active', facts: summaryFact(oldDate, 1) });
+writeOffer('safe.json', { ...baseOffer, id: 'safe_offer', name: 'Safe active offer', status: 'active', facts: summaryFact(today, 30) });
+writeOffer('draft.json', { ...baseOffer, id: 'draft_offer', name: 'Draft offer', status: 'draft', facts: summaryFact(today, 30) });
+
+const safetyResult = spawnSync(process.execPath, [safetyScript], { cwd: fixtureRepo, env: { ...process.env }, encoding: 'utf8' });
+assert.equal(safetyResult.status, 0, `offer safety scan should succeed: ${safetyResult.stderr || safetyResult.stdout}`);
+const unsafeAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'unsafe.json'), 'utf8'));
+const safeAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'safe.json'), 'utf8'));
+const draftAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'draft.json'), 'utf8'));
+assert.equal(unsafeAfter.status, 'paused', 'expired active offer must auto-pause');
+assert.ok(String(unsafeAfter.pauseReason || '').startsWith('auto safety pause:'), 'auto-pause reason must be explicit');
+assert.equal(safeAfter.status, 'active', 'valid active offer must remain active');
+assert.equal(draftAfter.status, 'draft', 'draft offer must never auto-activate');
+
+// Content-gap planner: detect cannibalization/new-page review, never auto-create, suppress stale data.
+const gapScript = path.resolve('scripts/content-gap-plan.mjs');
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'site.json'), JSON.stringify({ url: 'https://fixture-site.jp' }, null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'pages.json'), JSON.stringify([
+  { id: 'p1', path: '/one/', name: 'One' },
+  { id: 'p2', path: '/two/', name: 'Two' },
+  { id: 'p3', path: '/three/', name: 'Three' }
+], null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), JSON.stringify({
+  fetchedAt: new Date().toISOString(),
+  rows: [
+    { keys: ['同じ検索意図', 'https://fixture-site.jp/one/'], impressions: 40, clicks: 2, ctr: 0.05, position: 8 },
+    { keys: ['同じ検索意図', 'https://fixture-site.jp/two/'], impressions: 35, clicks: 1, ctr: 0.0286, position: 10 },
+    { keys: ['独立した新しい意図', 'https://fixture-site.jp/three/'], impressions: 60, clicks: 1, ctr: 0.0167, position: 22 }
+  ]
+}, null, 2));
+const gapEnv = {
+  ...process.env,
+  SITE_URL: 'https://fixture-site.jp',
+  CONTENT_GAP_MIN_IMPRESSIONS: '30',
+  GSC_DATA_MAX_AGE_HOURS: '72'
+};
+const gapResult = spawnSync(process.execPath, [gapScript], { cwd: fixtureRepo, env: gapEnv, encoding: 'utf8' });
+assert.equal(gapResult.status, 0, `content-gap planner should succeed: ${gapResult.stderr || gapResult.stdout}`);
+const gapPlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', 'content-gap-plan.json'), 'utf8'));
+const cannibal = gapPlan.candidates.find((item) => item.type === 'CANNIBALIZATION_REVIEW');
+const newPage = gapPlan.candidates.find((item) => item.type === 'NEW_PAGE_REVIEW');
+assert.ok(cannibal, 'content-gap planner should detect cannibalization');
+assert.ok(newPage, 'content-gap planner should surface a distinct new-page review');
+assert.equal(cannibal.autoCreateAllowed, false, 'cannibalization review must not auto-create a page');
+assert.equal(newPage.autoCreateAllowed, false, 'new-page review must not auto-create a page');
+
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), JSON.stringify({
+  fetchedAt: new Date(Date.now() - 100 * 3600000).toISOString(),
+  rows: [{ keys: ['古いデータ', 'https://fixture-site.jp/one/'], impressions: 1000, clicks: 0, ctr: 0, position: 25 }]
+}, null, 2));
+const staleGapResult = spawnSync(process.execPath, [gapScript], { cwd: fixtureRepo, env: gapEnv, encoding: 'utf8' });
+assert.equal(staleGapResult.status, 0, 'stale content-gap planner run should exit safely');
+const stalePlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', 'content-gap-plan.json'), 'utf8'));
+assert.equal(stalePlan.candidates.length, 0, 'stale Search Console data must not produce content-gap candidates');
+
+fs.rmSync(fixtureRoot, { recursive: true, force: true });
+console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; future fact, private backup, offer safety pause and content-gap guards verified.`);
