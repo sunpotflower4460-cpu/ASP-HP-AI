@@ -1,6 +1,7 @@
 import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSafeHttpsUrl } from './lib/url-safety.mjs';
 
 const site = JSON.parse(fs.readFileSync('data/site.json', 'utf8'));
 const offerDir = 'data/offers';
@@ -11,7 +12,8 @@ const add = (id, ok, level, message) => checks.push({ id, ok, level, message });
 const requireActiveOffer = process.env.REQUIRE_ACTIVE_OFFER_FOR_LAUNCH === 'true';
 
 const siteUrl = process.env.SITE_URL || site.url || '';
-add('site-url', Boolean(siteUrl) && !siteUrl.includes('example.com'), 'required', siteUrl && !siteUrl.includes('example.com') ? `Site URL: ${siteUrl}` : 'SITE_URL/data/site.json is still the example URL.');
+const safeSiteUrl = isSafeHttpsUrl(siteUrl);
+add('site-url', safeSiteUrl, 'required', safeSiteUrl ? `Site URL: ${siteUrl}` : 'SITE_URL/data/site.json must be a real HTTPS URL without credentials/placeholders/local hosts.');
 add('operator', Boolean(site.operator) && !String(site.operator).includes('設定してください'), 'required', 'Operator information must be finalized before public launch.');
 add('contact', Boolean(site.contact) && !String(site.contact).includes('設定してください'), 'required', 'Contact information must be finalized before public launch.');
 add(
@@ -26,8 +28,8 @@ add(
 );
 
 for (const offer of activeOffers) {
-  const urlsOk = /^https:\/\//.test(offer.affiliateUrl || '') && /^https:\/\//.test(offer.officialUrl || '');
-  add(`offer-url:${offer.id}`, urlsOk, 'required', `${offer.id}: affiliateUrl/officialUrl must both be HTTPS.`);
+  const urlsOk = isSafeHttpsUrl(offer.affiliateUrl) && isSafeHttpsUrl(offer.officialUrl);
+  add(`offer-url:${offer.id}`, urlsOk, 'required', `${offer.id}: affiliateUrl/officialUrl must both be real safe HTTPS URLs.`);
   add(`offer-web:${offer.id}`, (offer.allowedMedia || []).includes('web'), 'required', `${offer.id}: web must be an allowed medium.`);
   add(`offer-facts:${offer.id}`, Object.keys(offer.facts || {}).length > 0, 'required', `${offer.id}: at least one sourced fact is required.`);
 }
