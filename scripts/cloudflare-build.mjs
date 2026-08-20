@@ -1,3 +1,4 @@
+import './lib/load-local-env.mjs';
 import { spawnSync } from 'node:child_process';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
