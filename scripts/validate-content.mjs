@@ -21,6 +21,12 @@ for (const page of pages) {
   if (!fs.existsSync(target)) failures.push(`data/pages.json: ${page.id} points to missing ${path.relative(root,target)}`);
 }
 
+const requiredTrustPages = ['about.astro','disclosure.astro','privacy.astro','external-transmission.astro','contact.astro'];
+for (const name of requiredTrustPages) {
+  const file = path.join(root, 'src/pages', name);
+  if (!fs.existsSync(file)) failures.push(`required trust page missing: src/pages/${name}`);
+}
+
 const seenOfferIds = new Set();
 for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) {
   const offer = JSON.parse(fs.readFileSync(path.join(offerDir, file), 'utf8'));
@@ -44,9 +50,20 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]);
 }
+const titles = new Map();
 for (const file of walk(path.join(root, 'src/pages')).filter((f) => /\.(astro|md|mdx)$/.test(f))) {
   const text = fs.readFileSync(file, 'utf8');
   for (const phrase of rules.prohibitedPhrases) if (text.includes(phrase)) failures.push(`${path.relative(root,file)}: prohibited phrase '${phrase}'`);
+
+  const title = text.match(/<BaseLayout\s+title="([^"]+)"/)?.[1]?.trim();
+  if (title) {
+    const prior = titles.get(title);
+    if (prior) failures.push(`duplicate static page title '${title}': ${prior} and ${path.relative(root,file)}`);
+    else titles.set(title, path.relative(root,file));
+  }
+  if (file.includes(`${path.sep}guide${path.sep}`) && !/description="[^"]+"/.test(text)) {
+    warnings.push(`${path.relative(root,file)}: guide page uses default description; a page-specific description is recommended`);
+  }
 }
 
 for (const warning of warnings) console.warn(`WARN ${warning}`);
@@ -54,4 +71,4 @@ if (failures.length) {
   console.error('Validation failed:\n- ' + failures.join('\n- '));
   process.exit(1);
 }
-console.log('Content validation passed.');
+console.log(`Content validation passed (${titles.size} static page titles checked).`);
