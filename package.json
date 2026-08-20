@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "build": "npm run validate && npm run freshness && astro build && npm run smoke",
     "verify": "node scripts/verify.mjs",
     "verify:prod": "VERIFY_PRODUCTION=true node scripts/verify.mjs",
+    "ops:summary": "node scripts/ops-summary.mjs",
     "cloudflare:build": "node scripts/cloudflare-build.mjs",
     "preview": "astro preview",
     "local:daily": "node scripts/local-daily.mjs",
