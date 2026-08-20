@@ -31,6 +31,7 @@ if (process.env.LOCAL_AUTOMATION_ENABLED !== 'true') {
 
 const targetBranch = process.env.LOCAL_AUTOMATION_BRANCH || 'main';
 const autoPush = process.env.LOCAL_AUTO_PUSH === 'true';
+const remoteSmokeAfterPush = process.env.REMOTE_SMOKE_AFTER_PUSH === 'true';
 fs.mkdirSync(path.join(root, 'logs'), { recursive: true });
 
 function run(command, args, options = {}) {
@@ -88,7 +89,7 @@ function isSafeAutomatedOfferPause(file) {
 const runLock = acquireRunLock({
   lockPath: path.join(root, 'logs', 'local-daily.lock'),
   maxAgeHours: Number(process.env.LOCAL_RUN_LOCK_MAX_AGE_HOURS || 6),
-  metadata: { targetBranch, autoPush }
+  metadata: { targetBranch, autoPush, remoteSmokeAfterPush }
 });
 console.log(`Local daily lock acquired: ${runLock.runId}`);
 
@@ -213,6 +214,9 @@ run('git', ['commit', '-m', `chore: autonomous safety/content update ${date}`]);
 if (autoPush) {
   run('git', ['push', 'origin', targetBranch]);
   console.log('Autonomous safe update pushed. Cloudflare Pages Git integration will run the deployment gate.');
+  if (remoteSmokeAfterPush) {
+    run(npmCommand, ['run', 'remote:wait']);
+  }
 } else {
   console.log('Autonomous safe update committed locally. Set LOCAL_AUTO_PUSH=true only after the local loop is verified.');
 }
