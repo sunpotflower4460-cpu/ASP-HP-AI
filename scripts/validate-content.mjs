@@ -17,6 +17,13 @@ const validUrl = (value, { allowExample = false } = {}) => {
     return true;
   } catch { return false; }
 };
+const todayJst = (() => {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+})();
 const allowedDecisionTags = new Set(decisionTags.map((tag) => tag.id));
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 if (gaMeasurementId && !/^G-[A-Z0-9]+$/i.test(gaMeasurementId)) failures.push('PUBLIC_GA_MEASUREMENT_ID must look like G-XXXXXXXXXX or be empty');
@@ -35,8 +42,11 @@ for (const page of pages) {
   if (seenPageIds.has(page.id)) failures.push(`data/pages.json: duplicate page id '${page.id}'`);
   if (seenPagePaths.has(page.path)) failures.push(`data/pages.json: duplicate page path '${page.path}'`);
   seenPageIds.add(page.id); seenPagePaths.add(page.path);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(page.lastReviewedAt || '')) || Number.isNaN(Date.parse(`${page.lastReviewedAt}T00:00:00Z`))) {
+  const reviewed = String(page.lastReviewedAt || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reviewed) || Number.isNaN(Date.parse(`${reviewed}T00:00:00Z`))) {
     failures.push(`data/pages.json: ${page.id} requires valid lastReviewedAt (YYYY-MM-DD)`);
+  } else if (reviewed > todayJst) {
+    failures.push(`data/pages.json: ${page.id} lastReviewedAt cannot be in the future (${reviewed} > ${todayJst} JST)`);
   }
   const relative = page.path === '/' ? 'index' : page.path.replace(/^\//, '').replace(/\/$/, '');
   const target = path.join(root, 'src/pages', `${relative}.astro`);
@@ -69,6 +79,12 @@ for (const file of fs.readdirSync(offerDir).filter((f) => f.endsWith('.json'))) 
     if (!fact.source || !fact.checkedAt || !fact.ttlDays) failures.push(`${file}: fact ${key} lacks source/checkedAt/ttlDays`);
     if (fact.source && offer.status === 'active' && !validUrl(fact.source)) failures.push(`${file}: active fact ${key} source must use a real HTTPS URL without placeholders`);
     else if (fact.source && offer.status !== 'active' && !validUrl(fact.source, { allowExample: true })) failures.push(`${file}: fact ${key} source must use HTTPS`);
+    const checkedAt = String(fact.checkedAt || '');
+    if (checkedAt && (!/^\d{4}-\d{2}-\d{2}$/.test(checkedAt) || Number.isNaN(Date.parse(`${checkedAt}T00:00:00Z`)))) {
+      failures.push(`${file}: fact ${key} checkedAt must be YYYY-MM-DD`);
+    } else if (checkedAt && checkedAt > todayJst) {
+      failures.push(`${file}: fact ${key} checkedAt cannot be in the future (${checkedAt} > ${todayJst} JST)`);
+    }
   }
   if (!['a8','valuecommerce'].includes(String(offer.asp).toLowerCase())) warnings.push(`${file}: ASP '${offer.asp}' has no built-in adapter yet`);
 }
@@ -97,4 +113,4 @@ if (failures.length) {
   console.error('Validation failed:\n- ' + failures.join('\n- '));
   process.exit(1);
 }
-console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered, ${pages.length} review dates checked).`);
+console.log(`Content validation passed (${titles.size} static page titles checked, ${allowedDecisionTags.size} decision tags registered, ${pages.length} review dates checked; today=${todayJst} JST).`);
