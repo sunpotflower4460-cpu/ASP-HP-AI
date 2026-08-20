@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,6 +23,7 @@
     "offer:activate": "node scripts/activate-offer.mjs",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
     "gsc:submit": "node scripts/submit-sitemap.mjs",
+    "ga:fetch": "node scripts/fetch-ga.mjs",
     "a8:import": "node scripts/import-a8.mjs",
     "vc:fetch": "node scripts/fetch-valuecommerce.mjs",
     "affiliate:normalize": "node scripts/normalize-affiliate.mjs",
@@ -30,7 +31,7 @@
     "editor:plan": "node scripts/editor-plan.mjs",
     "editor:ai": "node scripts/editor-ai.mjs",
     "editor:apply": "node scripts/apply-title-proposal.mjs",
-    "daily": "npm run gsc:fetch && npm run vc:fetch && npm run affiliate:normalize && npm run analyze && npm run editor:plan && npm run editor:ai && npm run editor:apply"
+    "daily": "npm run gsc:fetch && npm run ga:fetch && npm run vc:fetch && npm run affiliate:normalize && npm run analyze && npm run editor:plan && npm run editor:ai && npm run editor:apply"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.3",
