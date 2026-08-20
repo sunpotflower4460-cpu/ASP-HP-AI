@@ -1,5 +1,18 @@
+---
+const focusByPath = new Map([
+  ['/guide/no-construction/', 'home-router'],
+  ['/guide/work-from-home/', 'work'],
+  ['/guide/gaming/', 'gaming'],
+  ['/guide/short-stay/', 'short-stay']
+]);
+const normalizedPath = Astro.url.pathname === '/' ? '/' : `${Astro.url.pathname.replace(/\/+$/, '')}/`;
+const focus = focusByPath.get(normalizedPath);
+const comparisonHref = focus ? `/comparison/?focus=${encodeURIComponent(focus)}` : '/comparison/';
+---
 <aside class="related card" aria-label="関連ガイド">
-  <h2>条件から続けて確認</h2>
+  <h2>次に確認する</h2>
+  <p><a href={comparisonHref}><strong>この条件で確認済み候補を比較する →</strong></a></p>
+  <h3>条件から続けて確認</h3>
   <ul class="link-list">
     <li><a href="/guide/rental-internet/">賃貸でネット環境を選ぶ基本</a></li>
     <li><a href="/guide/fiber-vs-home-router/">光回線とホームルーターの考え方</a></li>
@@ -8,6 +21,6 @@
     <li><a href="/guide/gaming/">オンラインゲーム用途</a></li>
     <li><a href="/guide/moving/">引っ越し前後の確認</a></li>
     <li><a href="/guide/short-stay/">短期居住・退去予定が近い場合</a></li>
-    <li><a href="/comparison/">条件別の比較基準</a></li>
+    <li><a href="/comparison/">すべての比較条件を見る</a></li>
   </ul>
 </aside>
