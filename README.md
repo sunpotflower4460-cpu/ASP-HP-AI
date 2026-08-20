@@ -8,7 +8,7 @@
 - A8 / ValueCommerce等をAdapter化
 - Search Consoleを主な観測データにする
 - AIは大量記事生成ではなく「必要な改善だけ」を行う
-- PR表記・事実ソース・予算上限をコードで強制
+- PR表記・事実ソース・情報鮮度・予算上限をコードで強制
 - `PUBLIC_READY=true` になるまで `noindex` を維持
 
 ## 開始
@@ -21,6 +21,7 @@ npm run dev
 ## 品質確認
 ```bash
 npm run validate
+npm run freshness
 npm run check
 npm run build
 ```
@@ -31,6 +32,14 @@ npm run build
 npm run gsc:fetch
 npm run analyze
 ```
+
+## A8成果取り込み
+A8から取得したCSVを、規約上許容される範囲で手動取得して取り込みます。
+```bash
+npm run a8:import -- /path/to/a8-report.csv
+npm run analyze
+```
+既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。
 
 ## 公開前に必須
 1. `data/site.json` の運営者情報・URLを設定

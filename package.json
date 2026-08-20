@@ -7,9 +7,11 @@
     "dev": "astro dev",
     "check": "astro check",
     "validate": "node scripts/validate-content.mjs",
-    "build": "npm run validate && astro build",
+    "freshness": "node scripts/check-freshness.mjs",
+    "build": "npm run validate && npm run freshness && astro build",
     "preview": "astro preview",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
+    "a8:import": "node scripts/import-a8.mjs",
     "analyze": "node scripts/daily-analysis.mjs"
   },
   "dependencies": {
