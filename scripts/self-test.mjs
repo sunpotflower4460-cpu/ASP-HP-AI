@@ -65,5 +65,61 @@ const unsafeBackupResult = spawnSync(process.execPath, [backupScript], {
 });
 assert.notEqual(unsafeBackupResult.status, 0, 'backup inside public repository must be rejected');
 
+// Deterministic Search Console content-gap planner test.
+const gapScript = path.resolve('scripts/content-gap-plan.mjs');
+const now = new Date().toISOString();
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'site.json'), JSON.stringify({ url: 'https://fixture.example' }, null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'pages.json'), JSON.stringify([
+  { id: 'p1', path: '/one/', name: 'One' },
+  { id: 'p2', path: '/two/', name: 'Two' },
+  { id: 'p3', path: '/three/', name: 'Three' }
+], null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), JSON.stringify({
+  fetchedAt: now,
+  rows: [
+    { keys: ['同じ検索意図', 'https://fixture.example/one/'], impressions: 40, clicks: 2, ctr: 0.05, position: 8 },
+    { keys: ['同じ検索意図', 'https://fixture.example/two/'], impressions: 35, clicks: 1, ctr: 0.0286, position: 10 },
+    { keys: ['独立した新しい意図', 'https://fixture.example/three/'], impressions: 60, clicks: 1, ctr: 0.0167, position: 22 }
+  ]
+}, null, 2));
+
+const gapResult = spawnSync(process.execPath, [gapScript], {
+  cwd: fixtureRepo,
+  env: {
+    ...process.env,
+    SITE_URL: 'https://fixture.example',
+    CONTENT_GAP_MIN_IMPRESSIONS: '30',
+    GSC_DATA_MAX_AGE_HOURS: '72'
+  },
+  encoding: 'utf8'
+});
+assert.equal(gapResult.status, 0, `content-gap planner should succeed: ${gapResult.stderr || gapResult.stdout}`);
+const gapPlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', 'content-gap-plan.json'), 'utf8'));
+const cannibal = gapPlan.candidates.find((item) => item.type === 'CANNIBALIZATION_REVIEW');
+const newPage = gapPlan.candidates.find((item) => item.type === 'NEW_PAGE_REVIEW');
+assert.ok(cannibal, 'content-gap planner should detect cannibalization');
+assert.ok(newPage, 'content-gap planner should surface a distinct new-page review');
+assert.equal(newPage.autoCreateAllowed, false, 'new-page review must never auto-create a page');
+assert.equal(cannibal.autoCreateAllowed, false, 'cannibalization review must never auto-create a page');
+
+const stale = new Date(Date.now() - 100 * 3600000).toISOString();
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), JSON.stringify({
+  fetchedAt: stale,
+  rows: [{ keys: ['古いデータ', 'https://fixture.example/one/'], impressions: 1000, clicks: 0, ctr: 0, position: 25 }]
+}, null, 2));
+const staleGapResult = spawnSync(process.execPath, [gapScript], {
+  cwd: fixtureRepo,
+  env: {
+    ...process.env,
+    SITE_URL: 'https://fixture.example',
+    CONTENT_GAP_MIN_IMPRESSIONS: '30',
+    GSC_DATA_MAX_AGE_HOURS: '72'
+  },
+  encoding: 'utf8'
+});
+assert.equal(staleGapResult.status, 0, 'stale content-gap planner run should exit safely');
+const stalePlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', 'content-gap-plan.json'), 'utf8'));
+assert.equal(stalePlan.candidates.length, 0, 'stale Search Console data must not produce content-gap candidates');
+
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
-console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; private backup round-trip verified.`);
+console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; private backup and content-gap guards verified.`);
