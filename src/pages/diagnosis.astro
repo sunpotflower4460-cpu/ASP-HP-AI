@@ -1,0 +1,31 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="3問でネット環境の方向性を整理">
+  <section class="card">
+    <h1>3問診断</h1>
+    <p>サービスを決める診断ではなく、まず「どの種類を比較すべきか」を整理します。</p>
+    <div id="quiz"></div>
+  </section>
+  <script is:inline>
+    const quiz = document.querySelector('#quiz');
+    const state = {};
+    const questions = [
+      ['construction','回線工事はできますか？',[['yes','できる / できそう'],['no','できない / 避けたい'],['unknown','わからない']]],
+      ['use','主な用途は？',[['game','オンラインゲーム'],['work','在宅勤務'],['video','動画・普段使い']]],
+      ['stay','居住予定は？',[['long','長め'],['short','短め / 未定']]]
+    ];
+    let index = 0;
+    function render(){
+      if(index >= questions.length){
+        const result = state.construction === 'no' ? '工事不要型を中心に比較' : state.use === 'game' ? '固定回線を優先して比較' : state.stay === 'short' ? '初期費用・解約条件を重視して比較' : '固定回線と工事不要型の両方を比較';
+        quiz.innerHTML = `<h2>整理結果</h2><p><strong>${result}</strong></p><p><a href="/guide/rental-internet/">選び方を確認する →</a></p>`;
+        return;
+      }
+      const [key,title,choices] = questions[index];
+      quiz.innerHTML = `<h2>${title}</h2>` + choices.map(([value,label]) => `<button class="choice" data-value="${value}">${label}</button>`).join('');
+      quiz.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => { state[key] = btn.dataset.value; index++; render(); }));
+    }
+    render();
+  </script>
+</BaseLayout>

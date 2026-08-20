@@ -1,0 +1,30 @@
+---
+import { getOffer } from '../lib/offers';
+import { buildTrackedAffiliateUrl } from '../lib/tracking';
+
+interface Props {
+  offerId: string;
+  pageId: string;
+  ctaId?: string;
+  positionId?: string;
+  label?: string;
+}
+
+const {
+  offerId,
+  pageId,
+  ctaId = 'cta01',
+  positionId = 'pos01',
+  label = '公式情報を見る'
+} = Astro.props;
+const offer = getOffer(offerId);
+const enabled = offer?.status === 'active' && Boolean(offer.affiliateUrl);
+const href = enabled
+  ? buildTrackedAffiliateUrl(offer!.affiliateUrl, { pageId, offerId, ctaId, positionId })
+  : '';
+---
+{enabled ? (
+  <a class="affiliate-cta" href={href} rel="sponsored nofollow noopener" target="_blank">{label}</a>
+) : (
+  <span class="affiliate-cta disabled" aria-disabled="true">案件準備中</span>
+)}

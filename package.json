@@ -1,0 +1,23 @@
+{
+  "name": "asp-hp-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "check": "astro check",
+    "validate": "node scripts/validate-content.mjs",
+    "build": "npm run validate && astro build",
+    "preview": "astro preview",
+    "gsc:fetch": "node scripts/fetch-gsc.mjs",
+    "analyze": "node scripts/daily-analysis.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.3",
+    "astro": "7.1.6"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "7.0.2"
+  }
+}

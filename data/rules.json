@@ -1,0 +1,7 @@
+{
+  "prohibitedPhrases": ["絶対に儲かる", "必ず儲かる", "100%安全", "日本一"],
+  "requireAffiliateDisclosure": true,
+  "maxNewPagesPerWeek": 2,
+  "maxEditedPagesPerDay": 2,
+  "minDaysBetweenSamePageEdits": 7
+}

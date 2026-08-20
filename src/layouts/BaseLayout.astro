@@ -1,0 +1,31 @@
+---
+import Disclosure from '../components/Disclosure.astro';
+import site from '../../data/site.json';
+import '../styles/global.css';
+
+interface Props { title: string; description?: string; }
+const { title, description = site.description } = Astro.props;
+const publicReady = import.meta.env.PUBLIC_READY === 'true';
+---
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title} | {site.name}</title>
+    <meta name="description" content={description} />
+    {!publicReady && <meta name="robots" content="noindex,nofollow" />}
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="/" class="brand">{site.name}</a>
+      <nav><a href="/guide/rental-internet/">選び方</a><a href="/diagnosis/">3問診断</a></nav>
+    </header>
+    <Disclosure />
+    <main><slot /></main>
+    <footer>
+      <nav><a href="/disclosure/">広告・比較方針</a><a href="/privacy/">プライバシー</a><a href="/contact/">お問い合わせ</a></nav>
+      <small>© {new Date().getFullYear()} {site.name}</small>
+    </footer>
+  </body>
+</html>
