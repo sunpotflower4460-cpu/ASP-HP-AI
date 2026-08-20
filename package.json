@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -30,6 +30,7 @@
     "offer:check": "node scripts/offer-readiness.mjs",
     "offer:activate": "node scripts/activate-offer.mjs",
     "offer:pause": "node scripts/pause-offer.mjs",
+    "offer:safety-scan": "node scripts/offer-safety-scan.mjs",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
     "gsc:submit": "node scripts/submit-sitemap.mjs",
     "ga:fetch": "node scripts/fetch-ga.mjs",
