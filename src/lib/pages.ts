@@ -5,6 +5,7 @@ export type PageMeta = {
   path: string;
   name: string;
   editable: boolean;
+  lastReviewedAt?: string;
 };
 
 export function getPageById(id: string): PageMeta | undefined {
