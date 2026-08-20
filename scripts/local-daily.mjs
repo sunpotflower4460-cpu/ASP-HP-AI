@@ -98,6 +98,15 @@ if (backupDir) {
 // operations reports remain local-only via .gitignore. Only public site source edits
 // are eligible for autonomous commit/push.
 const allowlistedPaths = ['src/pages'];
+const trackedChanged = capture('git', ['diff', '--name-only']);
+const unexpectedTracked = trackedChanged
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .filter((file) => !allowlistedPaths.some((prefix) => file === prefix || file.startsWith(`${prefix}/`)));
+if (unexpectedTracked.length) {
+  throw new Error(`Refusing autonomous commit because tracked files outside the public-content allowlist changed:\n${unexpectedTracked.join('\n')}`);
+}
+
 for (const target of allowlistedPaths) {
   if (fs.existsSync(path.join(root, target))) run('git', ['add', '--', target]);
 }
