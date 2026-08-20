@@ -72,17 +72,22 @@ run(npmCommand, ['run', 'ops:summary']);
 
 // Operational observations are intentionally local-only because this repository is public.
 // If configured, snapshot them outside the repository before any public source is committed.
-if (process.env.LOCAL_BACKUP_DIR?.trim()) {
+const backupRequired = process.env.LOCAL_BACKUP_REQUIRED === 'true';
+const backupDir = process.env.LOCAL_BACKUP_DIR?.trim();
+if (backupRequired && !backupDir) {
+  throw new Error('LOCAL_BACKUP_REQUIRED=true but LOCAL_BACKUP_DIR is empty. Autonomous public-content commit is blocked.');
+}
+if (backupDir) {
   const backup = run(npmCommand, ['run', 'local:backup'], { allowFailure: true });
   if (backup.status !== 0) {
     const message = 'Private operational-data backup failed.';
-    if (process.env.LOCAL_BACKUP_REQUIRED === 'true') throw new Error(`${message} LOCAL_BACKUP_REQUIRED=true, so autonomous public-content commit is blocked.`);
+    if (backupRequired) throw new Error(`${message} LOCAL_BACKUP_REQUIRED=true, so autonomous public-content commit is blocked.`);
     console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
   } else {
     const backupVerify = run(npmCommand, ['run', 'local:backup:verify'], { allowFailure: true });
     if (backupVerify.status !== 0) {
       const message = 'Private backup integrity verification failed.';
-      if (process.env.LOCAL_BACKUP_REQUIRED === 'true') throw new Error(`${message} Autonomous public-content commit is blocked.`);
+      if (backupRequired) throw new Error(`${message} Autonomous public-content commit is blocked.`);
       console.warn(`${message} Public-content automation may continue because LOCAL_BACKUP_REQUIRED is not true.`);
     }
   }
