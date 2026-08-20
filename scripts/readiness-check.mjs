@@ -1,7 +1,7 @@
 import './lib/load-local-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isSafeHttpsUrl } from './lib/url-safety.mjs';
+import { isSafeHttpsUrl, isSafeSiteBaseUrl } from './lib/url-safety.mjs';
 
 const site = JSON.parse(fs.readFileSync('data/site.json', 'utf8'));
 const offerDir = 'data/offers';
@@ -12,8 +12,8 @@ const add = (id, ok, level, message) => checks.push({ id, ok, level, message });
 const requireActiveOffer = process.env.REQUIRE_ACTIVE_OFFER_FOR_LAUNCH === 'true';
 
 const siteUrl = process.env.SITE_URL || site.url || '';
-const safeSiteUrl = isSafeHttpsUrl(siteUrl);
-add('site-url', safeSiteUrl, 'required', safeSiteUrl ? `Site URL: ${siteUrl}` : 'SITE_URL/data/site.json must be a real HTTPS URL without credentials/placeholders/local hosts.');
+const safeSiteUrl = isSafeSiteBaseUrl(siteUrl);
+add('site-url', safeSiteUrl, 'required', safeSiteUrl ? `Site URL: ${siteUrl}` : 'SITE_URL/data/site.json must be a real HTTPS origin URL with no subpath/query/hash/credentials/placeholders/local hosts.');
 add('operator', Boolean(site.operator) && !String(site.operator).includes('設定してください'), 'required', 'Operator information must be finalized before public launch.');
 add('contact', Boolean(site.contact) && !String(site.contact).includes('設定してください'), 'required', 'Contact information must be finalized before public launch.');
 add(
