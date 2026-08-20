@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { scoreCommercialIntent, classifyCommercialIntent } from './lib/commercial-intent.mjs';
+import { evaluateOffer } from './lib/offer-tools.mjs';
 
 const zero = scoreCommercialIntent({});
 assert.equal(zero, 0, 'empty signal should score 0');
@@ -21,6 +22,31 @@ assert.equal(classifyCommercialIntent({ score: confirmed, confirmedYen: 9000 }),
 
 const capped = scoreCommercialIntent({ searchClicks: 1, affiliateClicks: 100000, confirmedYen: 999999 });
 assert.ok(capped <= 100, `score must be capped at 100, got ${capped}`);
+
+const futureDate = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+const futureFactOffer = evaluateOffer({
+  id: 'future_fact_test',
+  name: 'Future fact test offer',
+  asp: 'a8',
+  status: 'draft',
+  affiliateUrl: 'https://affiliate.invalid/click',
+  officialUrl: 'https://service.invalid/',
+  allowedMedia: ['web'],
+  decisionTags: ['home-router'],
+  facts: {
+    summary: {
+      value: '公式情報を確認した説明文として十分な長さのテストです。',
+      source: 'https://service.invalid/fact',
+      checkedAt: futureDate,
+      ttlDays: 30
+    }
+  }
+});
+assert.equal(futureFactOffer.ready, false, 'future-dated fact must make an offer not ready');
+assert.ok(
+  futureFactOffer.requiredFailures.some((item) => item.id === 'fact-not-future:summary'),
+  'future-dated fact guard must be reported explicitly'
+);
 
 // Deterministic local-backup test. No network, API credential or GitHub Actions required.
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asp-hp-ai-selftest-'));
@@ -122,4 +148,4 @@ const stalePlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', '
 assert.equal(stalePlan.candidates.length, 0, 'stale Search Console data must not produce content-gap candidates');
 
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
-console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; private backup and content-gap guards verified.`);
+console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; future fact, private backup and content-gap guards verified.`);
