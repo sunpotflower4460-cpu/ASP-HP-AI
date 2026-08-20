@@ -10,6 +10,12 @@ if (!email || !privateKey || !siteUrl) {
   process.exit(0);
 }
 
+const configuredMaxPages = Number(process.env.GSC_MAX_PAGES || 4);
+if (!Number.isInteger(configuredMaxPages) || configuredMaxPages < 1 || configuredMaxPages > 20) {
+  throw new Error('GSC_MAX_PAGES must be an integer from 1 to 20.');
+}
+const maxPages = configuredMaxPages;
+
 const accessToken = await getGoogleServiceAccountToken({
   email,
   privateKey,
@@ -20,11 +26,10 @@ const start = new Date(end.getTime() - 27 * 86400000);
 const date = (d) => d.toISOString().slice(0, 10);
 const api = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
 const rowLimit = 25000;
-const maxPages = Math.max(1, Math.min(20, Number(process.env.GSC_MAX_PAGES || 3)));
 const allRows = [];
 let responseAggregationType = null;
 let pagesFetched = 0;
-let complete = false;
+let terminalPageReached = false;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -71,12 +76,12 @@ for (let page = 0; page < maxPages; page += 1) {
   allRows.push(...rows);
 
   if (rows.length < rowLimit) {
-    complete = true;
+    terminalPageReached = true;
     break;
   }
 }
 
-if (!complete) {
+if (!terminalPageReached) {
   throw new Error(`GSC pagination safety limit reached (${maxPages} page(s), ${allRows.length} row(s)) before a terminal page. Increase GSC_MAX_PAGES only after reviewing API limits. Previous latest.json was left untouched.`);
 }
 
@@ -91,14 +96,17 @@ const output = {
     rowLimit,
     pagesFetched,
     totalRows: allRows.length,
-    complete
+    terminalPageReached,
+    // Search Analytics can still omit some query/page rows because of internal
+    // Search Console limits. This only means the API paging sequence terminated.
+    exhaustiveSearchUniverse: false
   }
 };
 
-// Write only after every page succeeded. A transient failure never replaces the
-// previous known-good observation with a partial dataset.
+// Write only after every requested page succeeded. A transient failure never
+// replaces the previous known-good observation with a partial dataset.
 fs.mkdirSync('data/search-console', { recursive: true });
 const temp = 'data/search-console/latest.json.tmp';
 fs.writeFileSync(temp, `${JSON.stringify(output, null, 2)}\n`);
 fs.renameSync(temp, 'data/search-console/latest.json');
-console.log(`Saved ${allRows.length} Search Console rows across ${pagesFetched} page(s).`);
+console.log(`Saved ${allRows.length} Search Console rows across ${pagesFetched} page(s); API paging terminated, but query/page data is best-effort rather than exhaustive.`);
