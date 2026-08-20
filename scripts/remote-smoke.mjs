@@ -13,6 +13,7 @@ const expectPublic = process.env.REMOTE_EXPECT_PUBLIC !== 'false';
 const timeoutMs = Math.max(1000, Math.min(60000, Number(process.env.REMOTE_SMOKE_TIMEOUT_MS || 10000)));
 const requireCommitMatch = process.env.REMOTE_REQUIRE_COMMIT_MATCH === 'true';
 const productionBranch = String(process.env.PRODUCTION_BRANCH || 'main').trim();
+const localPackage = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const failures = [];
 const observations = [];
 
@@ -83,6 +84,9 @@ if (health) {
   if (Boolean(health.publicReady) !== expectPublic) {
     failures.push(`/health.json: publicReady=${health.publicReady} but REMOTE_EXPECT_PUBLIC=${expectPublic}`);
   }
+  if (health.siteOrigin && health.siteOrigin !== base.origin) {
+    failures.push(`/health.json: siteOrigin=${health.siteOrigin} but expected ${base.origin}`);
+  }
   if (expectPublic && health.branch && health.branch !== productionBranch) {
     failures.push(`/health.json: public deployment reports branch '${health.branch}', expected '${productionBranch}'`);
   }
@@ -91,6 +95,8 @@ if (health) {
     if (!head) failures.push('Cannot resolve local git HEAD for commit-match check');
     else if (!health.commitSha) failures.push('/health.json: Cloudflare commitSha is missing');
     else if (health.commitSha !== head) failures.push(`Remote commit ${health.commitSha} does not match local HEAD ${head}`);
+    if (!health.version) failures.push('/health.json: application version is missing');
+    else if (health.version !== localPackage.version) failures.push(`Remote version ${health.version} does not match local package version ${localPackage.version}`);
   }
 }
 
@@ -134,6 +140,8 @@ const report = {
   site: base.origin,
   expectPublic,
   productionBranch,
+  localVersion: localPackage.version,
+  remoteVersion: health?.version || null,
   requireCommitMatch,
   localHead: head,
   remoteCommitSha: health?.commitSha || null,
@@ -150,4 +158,4 @@ if (failures.length) {
   console.error(`Remote smoke test failed:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }
-console.log(`Remote smoke test passed (${observations.length} endpoint(s), public=${expectPublic}, branch=${productionBranch}).`);
+console.log(`Remote smoke test passed (${observations.length} endpoint(s), public=${expectPublic}, branch=${productionBranch}, version=${health?.version || 'unknown'}).`);
