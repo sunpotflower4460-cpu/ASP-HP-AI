@@ -2,6 +2,7 @@
   "id": "example_offer",
   "name": "サンプル案件（公開不可）",
   "asp": "a8",
+  "aspProgramId": null,
   "status": "draft",
   "affiliateUrl": "",
   "officialUrl": "https://example.com",

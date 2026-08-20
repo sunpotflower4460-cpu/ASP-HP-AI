@@ -1,20 +1,20 @@
 # ASP-HP-AI
 
-低コストで運用する、HP中心の自律型アフィリエイトサイト基盤です。
+低固定費で運用する、自律成長型アフィリエイト特化サイトのV1です。
 
-## V1の方針
-- 動画生成なし / 広告費なし
-- Astro + Cloudflare Pages想定
+## 方針
+- HPを主媒体にする
+- 動画生成・広告費を前提にしない
 - A8 / ValueCommerce等をAdapter化
 - Search Consoleを主な観測データにする
 - AIは大量記事生成ではなく「必要な改善だけ」を行う
 - PR表記・事実ソース・情報鮮度・予算上限をコードで強制
 - `PUBLIC_READY=true` になるまで `noindex` を維持
+- AI自動編集は明示的にONにするまで提案だけで止める
 
 ## 開始
 ```bash
 npm install
-cp .env.example .env
 npm run dev
 ```
 
@@ -27,25 +27,64 @@ npm run build
 ```
 
 ## Search Console
-`GSC_CLIENT_EMAIL`、`GSC_PRIVATE_KEY`、`GSC_SITE_URL` を設定後:
+サービスアカウントをSearch Consoleプロパティへ追加し、環境変数を設定します。
 ```bash
 npm run gsc:fetch
 npm run analyze
+npm run editor:plan
 ```
 
 ## A8成果取り込み
-A8から取得したCSVを、規約上許容される範囲で手動取得して取り込みます。
+A8から取得した公式CSVを取り込みます。
 ```bash
 npm run a8:import -- /path/to/a8-report.csv
+npm run affiliate:normalize
 npm run analyze
 ```
-既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。
+既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。CSV全列は保存せず、成果分析に必要な最小データのみ残します。
+
+## ValueCommerce成果自動取得
+管理画面「ツール > レポートAPI」でAPI認証キーを発行して環境変数へ設定します。
+```bash
+VALUECOMMERCE_CLIENT_KEY=... \
+VALUECOMMERCE_CLIENT_SECRET=... \
+npm run vc:fetch
+npm run affiliate:normalize
+npm run analyze
+```
+公式注文別レポートAPI v3から、保留・承認・拒否・請求済みを取得して共通収益イベントへ正規化します。
+
+## AI編集長（初期値は停止）
+`npm run editor:plan` はSearch Consoleと収益データから編集候補を作ります。AIを使わないので0円です。
+
+Cloudflare Workers AIでタイトル/内容提案を作る場合のみ以下を設定します。
+```bash
+AI_EDITOR_ENABLED=true
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+npm run editor:ai
+```
+第三者の有料モデルは `ALLOW_PAID_AI=true` を明示しない限り拒否します。さらに `EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` の両方が満たされた場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。収益実績のあるページは自動変更から保護されます。
+
+## 日次パイプライン
+```bash
+npm run daily
+```
+GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` にするまで動きません。
 
 ## 公開前に必須
 1. `data/site.json` の運営者情報・URLを設定
 2. `data/offers/*.json` に実案件を登録し、公式情報源を付ける
-3. ASPの媒体登録・提携を完了
-4. `PUBLIC_READY=true` を設定
-5. CIが全てPASSしていることを確認
+3. `npm run build` をPASSさせる
+4. Search Console登録・サイトマップ確認
+5. PR/外部送信表示を実サイトで目視確認
+6. `PUBLIC_READY=true` を設定してからindex公開
 
-詳細は `ARCHITECTURE.md` / `AFFILIATE_RULES.md` / `CONTENT_POLICY.md` を参照してください。
+## 安全思想
+- AIが外部情報を勝手に事実として追加しない
+- active案件の事実が期限切れならbuildを止める
+- A8以外のASPリンクに未知の追跡パラメータを勝手に付けない
+- AIを止めても静的サイトと収益導線は動き続ける
+- 自動編集はSearch Consoleの実データがあるページだけを対象にする
+- 確定収益があるページは自動変更より保護を優先する

@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 
-const gscPath = 'data/search-console/latest.json';
-const a8Path = 'data/affiliate/a8-latest.json';
-const gsc = fs.existsSync(gscPath) ? JSON.parse(fs.readFileSync(gscPath,'utf8')) : null;
-const a8 = fs.existsSync(a8Path) ? JSON.parse(fs.readFileSync(a8Path,'utf8')) : null;
+const readJson = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+const gsc = readJson('data/search-console/latest.json');
+const affiliate = readJson('data/affiliate/normalized-latest.json');
 
 const opportunities = (gsc?.rows || [])
   .map((row) => ({query:row.keys?.[0],page:row.keys?.[1],clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position}))
@@ -12,18 +11,25 @@ const opportunities = (gsc?.rows || [])
   .sort((a,b)=>b.impressions-a.impressions)
   .slice(0,30);
 
-const affiliateWinners = (a8?.summary || []).filter((x) => x.pageId || x.offerId).slice(0,20);
+const affiliatePaths = (affiliate?.paths || []).filter((x) => x.pageId || x.offerId || x.programId).slice(0,30);
+const winners = affiliatePaths.filter((x) => x.confirmedYen > 0);
+const pending = affiliatePaths.filter((x) => x.confirmedYen === 0 && x.pendingYen > 0);
+const protectedPages = new Set(winners.map((x) => x.pageId).filter(Boolean));
+
 const report = {
   generatedAt:new Date().toISOString(),
   gscFetchedAt:gsc?.fetchedAt || null,
-  a8ImportedAt:a8?.importedAt || null,
+  affiliateNormalizedAt:affiliate?.normalizedAt || null,
+  revenue: affiliate?.totals || { events:0,pendingYen:0,confirmedYen:0,rejectedYen:0,unknownYen:0 },
   opportunities,
-  affiliateWinners,
+  affiliatePaths,
+  protectedPages:[...protectedPages],
   nextActions: [
-    ...affiliateWinners.slice(0,3).map((x) => ({type:'PROTECT_WINNER', target:x.pageId, reason:`tracked reward ¥${x.amountYen}`})),
-    ...opportunities.slice(0,10).map((x) => ({type:x.action, target:x.page, query:x.query}))
+    ...winners.slice(0,5).map((x) => ({type:'PROTECT_WINNER', target:x.pageId || x.offerId || x.programName, reason:`confirmed reward ¥${x.confirmedYen}`})),
+    ...pending.slice(0,5).map((x) => ({type:'MONITOR_PENDING', target:x.pageId || x.offerId || x.programName, reason:`pending reward ¥${x.pendingYen}`})),
+    ...opportunities.slice(0,10).map((x) => ({type:x.action, target:x.page, query:x.query, protectedByRevenue: protectedPages.has(x.page)}))
   ]
 };
 fs.mkdirSync('reports',{recursive:true});
 fs.writeFileSync('reports/latest.json',JSON.stringify(report,null,2));
-console.log(`Report: ${opportunities.length} search opportunities, ${affiliateWinners.length} affiliate paths.`);
+console.log(`Report: ${opportunities.length} search opportunities, ${winners.length} confirmed revenue paths, ${pending.length} pending paths.`);

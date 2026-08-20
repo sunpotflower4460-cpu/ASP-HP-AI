@@ -35,6 +35,8 @@ const objects = parsed.slice(1).map((cells) => Object.fromEntries(headers.map((h
 const get = (row, candidates) => { for (const key of candidates) if (key in row && row[key] !== '') return row[key]; return ''; };
 const money = (value) => Number(String(value || '').replace(/[¥￥,\s円]/g, '')) || 0;
 
+// Persist only fields required for revenue attribution. Do not store the full
+// source row because report exports may contain unnecessary/sensitive columns.
 const rows = objects.map((raw, index) => ({
   row: index + 2,
   occurredAt: get(raw, ['成果発生日','発生日','注文日時','発生日時']),
@@ -44,8 +46,7 @@ const rows = objects.map((raw, index) => ({
   offerId: get(raw, ['id2','ID2']),
   ctaId: get(raw, ['id3','ID3']),
   positionId: get(raw, ['id4','ID4']),
-  extraId: get(raw, ['id5','ID5']),
-  raw
+  extraId: get(raw, ['id5','ID5'])
 }));
 
 const grouped = new Map();
@@ -60,7 +61,6 @@ const output = {
   importedAt: new Date().toISOString(),
   sourceFile: path.basename(input),
   encoding,
-  headers,
   rows,
   summary: [...grouped.values()].sort((a,b) => b.amountYen - a.amountYen)
 };

@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,13 @@
     "preview": "astro preview",
     "gsc:fetch": "node scripts/fetch-gsc.mjs",
     "a8:import": "node scripts/import-a8.mjs",
-    "analyze": "node scripts/daily-analysis.mjs"
+    "vc:fetch": "node scripts/fetch-valuecommerce.mjs",
+    "affiliate:normalize": "node scripts/normalize-affiliate.mjs",
+    "analyze": "node scripts/daily-analysis.mjs",
+    "editor:plan": "node scripts/editor-plan.mjs",
+    "editor:ai": "node scripts/editor-ai.mjs",
+    "editor:apply": "node scripts/apply-title-proposal.mjs",
+    "daily": "npm run gsc:fetch && npm run vc:fetch && npm run affiliate:normalize && npm run analyze && npm run editor:plan && npm run editor:ai && npm run editor:apply"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.3",

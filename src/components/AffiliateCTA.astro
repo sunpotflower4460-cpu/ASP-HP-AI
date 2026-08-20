@@ -20,7 +20,7 @@ const {
 const offer = getOffer(offerId);
 const enabled = offer?.status === 'active' && Boolean(offer.affiliateUrl);
 const href = enabled
-  ? buildTrackedAffiliateUrl(offer!.affiliateUrl, { pageId, offerId, ctaId, positionId })
+  ? buildTrackedAffiliateUrl(offer!.affiliateUrl, offer!.asp, { pageId, offerId, ctaId, positionId })
   : '';
 ---
 {enabled ? (

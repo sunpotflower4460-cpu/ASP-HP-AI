@@ -14,7 +14,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: npm install
       - name: Fetch Search Console
         env:
@@ -22,12 +21,37 @@ jobs:
           GSC_PRIVATE_KEY: ${{ secrets.GSC_PRIVATE_KEY }}
           GSC_SITE_URL: ${{ secrets.GSC_SITE_URL }}
         run: npm run gsc:fetch
+      - name: Fetch ValueCommerce revenue
+        env:
+          VALUECOMMERCE_CLIENT_KEY: ${{ secrets.VALUECOMMERCE_CLIENT_KEY }}
+          VALUECOMMERCE_CLIENT_SECRET: ${{ secrets.VALUECOMMERCE_CLIENT_SECRET }}
+          VALUECOMMERCE_LOOKBACK_DAYS: 30
+        run: npm run vc:fetch
+      - run: npm run affiliate:normalize
       - run: npm run analyze
-      - name: Store observation snapshot
+      - run: npm run editor:plan
+      - name: Optional low-cost AI editor
+        env:
+          AI_EDITOR_ENABLED: ${{ vars.AI_EDITOR_ENABLED }}
+          EDITOR_AUTO_APPLY_TITLE: ${{ vars.EDITOR_AUTO_APPLY_TITLE }}
+          ALLOW_PAID_AI: 'false'
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_AI_MODEL: ${{ vars.CLOUDFLARE_AI_MODEL }}
+        run: npm run editor:ai
+      - name: Apply explicitly enabled safe title proposals
+        env:
+          EDITOR_AUTO_APPLY_TITLE: ${{ vars.EDITOR_AUTO_APPLY_TITLE }}
+        run: npm run editor:apply
+      - run: npm run validate
+      - run: npm run freshness
+      - run: npm run check
+      - run: npm run build
+      - name: Store observations and allowed safe edits
         run: |
           git config user.name "asp-hp-ai-bot"
           git config user.email "asp-hp-ai-bot@users.noreply.github.com"
-          git add -- data/search-console/latest.json reports/latest.json || true
+          git add -- data/search-console/latest.json data/affiliate/valuecommerce-latest.json data/affiliate/normalized-latest.json reports/latest.json reports/editor-plan.json reports/ai-editor-proposal.json src/pages || true
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: update daily search observations"
+          git commit -m "chore: update autonomous site observations"
           git push
