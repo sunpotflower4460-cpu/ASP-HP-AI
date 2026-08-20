@@ -1,6 +1,7 @@
 ---
 import Disclosure from '../components/Disclosure.astro';
 import site from '../../data/site.json';
+import pages from '../../data/pages.json';
 import '../styles/global.css';
 
 interface Props { title: string; description?: string; }
@@ -8,14 +9,27 @@ const { title, description = site.description } = Astro.props;
 const publicReady = import.meta.env.PUBLIC_READY === 'true';
 const siteBase = Astro.site || new URL(import.meta.env.SITE_URL || site.url || 'https://example.com');
 const canonical = new URL(Astro.url.pathname, siteBase);
+const normalizedPath = Astro.url.pathname === '/' ? '/' : `${Astro.url.pathname.replace(/\/+$/, '')}/`;
+const pageMeta = pages.find((page) => page.path === normalizedPath);
 const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
-const websiteSchema = {
+const structuredData = {
   '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  name: site.name,
-  url: siteBase.toString(),
-  description: site.description
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: site.name,
+      url: siteBase.toString(),
+      description: site.description
+    },
+    {
+      '@type': 'WebPage',
+      name: `${title} | ${site.name}`,
+      url: canonical.toString(),
+      description,
+      ...(pageMeta?.lastReviewedAt ? { dateModified: pageMeta.lastReviewedAt } : {})
+    }
+  ]
 };
 const analyticsScript = analyticsEnabled ? `
 window.dataLayer = window.dataLayer || [];
@@ -50,7 +64,7 @@ document.addEventListener('click', function(event) {
     <meta property="og:url" content={canonical.toString()} />
     <meta name="twitter:card" content="summary" />
     {!publicReady && <meta name="robots" content="noindex,nofollow" />}
-    <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
     {analyticsEnabled && <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}></script>}
     {analyticsEnabled && <script is:inline set:html={analyticsScript}></script>}
   </head>
@@ -60,6 +74,11 @@ document.addEventListener('click', function(event) {
       <nav aria-label="主要メニュー"><a href="/guide/rental-internet/">選び方</a><a href="/comparison/">比較</a><a href="/diagnosis/">3問診断</a><a href="/faq/">FAQ</a></nav>
     </header>
     <Disclosure />
+    {pageMeta?.lastReviewedAt && (
+      <aside class="page-review-meta" aria-label="ページ情報">
+        <span>内容確認日: {pageMeta.lastReviewedAt}</span> · <a href="/about/">編集・比較方針</a>
+      </aside>
+    )}
     <main><slot /></main>
     <footer>
       <nav><a href="/about/">運営方針</a><a href="/disclosure/">広告・比較方針</a><a href="/privacy/">プライバシー</a><a href="/external-transmission/">外部送信</a><a href="/contact/">お問い合わせ</a></nav>
