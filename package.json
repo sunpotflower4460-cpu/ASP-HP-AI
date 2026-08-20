@@ -18,6 +18,7 @@
     "ops:summary": "node scripts/ops-summary.mjs",
     "cloudflare:build": "node scripts/cloudflare-build.mjs",
     "preview": "astro preview",
+    "local:doctor": "node scripts/local-doctor.mjs",
     "local:daily": "node scripts/local-daily.mjs",
     "local:backup": "node scripts/local-backup-safe.mjs",
     "local:backup:verify": "node scripts/local-backup-verify.mjs",
