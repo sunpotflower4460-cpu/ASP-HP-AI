@@ -35,6 +35,7 @@
     "vc:fetch": "node scripts/fetch-valuecommerce.mjs",
     "affiliate:normalize": "node scripts/normalize-affiliate.mjs",
     "analyze": "node scripts/daily-analysis.mjs",
+    "gap:plan": "node scripts/content-gap-plan.mjs",
     "editor:plan": "node scripts/editor-plan.mjs",
     "editor:ai": "node scripts/editor-ai.mjs",
     "editor:apply": "node scripts/apply-title-proposal.mjs",
