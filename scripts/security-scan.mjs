@@ -22,8 +22,11 @@ function trackedFiles() {
 }
 
 const files = trackedFiles();
-for (const forbidden of ['.env', '.env.local']) {
-  if (files.includes(forbidden)) failures.push(`${forbidden} must never be tracked.`);
+for (const relative of files) {
+  const base = path.basename(relative);
+  const envLike = /^\.env(?:$|\.|rc$)/i.test(base);
+  const safeExample = /\.example$/i.test(base);
+  if (envLike && !safeExample) failures.push(`${relative}: environment file must never be tracked; commit only *.example templates.`);
 }
 
 // The repository is public. Operational observations and revenue reports must
@@ -48,7 +51,8 @@ const textExtensions = new Set(['.js','.mjs','.cjs','.ts','.tsx','.astro','.md',
 const directPatterns = [
   { name: 'private key block', regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
   { name: 'GitHub personal token', regex: /\b(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}\b/ },
-  { name: 'OpenAI-style secret key', regex: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/ }
+  { name: 'OpenAI-style secret key', regex: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'Google API key', regex: /\bAIza[0-9A-Za-z_-]{30,}\b/ }
 ];
 const assignmentNames = [
   'GSC_PRIVATE_KEY',
@@ -57,7 +61,7 @@ const assignmentNames = [
   'VALUECOMMERCE_CLIENT_KEY',
   'VALUECOMMERCE_CLIENT_SECRET'
 ];
-const placeholderValues = new Set(['', '...', '<...>', '<secret>', 'change_me', 'changeme', 'example', 'your-token', 'your-secret']);
+const placeholderValues = new Set(['', '...', '<...>', '<secret>', 'change_me', 'changeme', 'example', 'your-token', 'your-secret', 'null']);
 
 for (const relative of files) {
   const full = path.join(root, relative);
@@ -74,9 +78,13 @@ for (const relative of files) {
   }
 
   for (const name of assignmentNames) {
-    const regex = new RegExp(`^\\s*${name}\\s*=\\s*(.+?)\\s*$`, 'gmi');
+    // Covers ENV syntax plus simple JSON/YAML assignments such as
+    // "CLOUDFLARE_API_TOKEN": "..." without matching process.env reads.
+    const regex = new RegExp(`^\\s*["']?${name}["']?\\s*(?:=|:)\\s*([^\\r\\n]*)$`, 'gmi');
     for (const match of text.matchAll(regex)) {
-      const value = String(match[1] || '').replace(/^['\"]|['\"]$/g, '').trim();
+      let value = String(match[1] || '').trim();
+      value = value.replace(/[,}]\s*$/, '').trim();
+      value = value.replace(/^['\"]|['\"]$/g, '').trim();
       if (!placeholderValues.has(value.toLowerCase()) && !value.startsWith('${') && !value.startsWith('$')) {
         failures.push(`${relative}: ${name} appears to contain a committed value`);
       }
