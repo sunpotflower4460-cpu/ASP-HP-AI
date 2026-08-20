@@ -28,7 +28,7 @@ imports/
 .env.local
 ```
 
-日次botが自動commitできるのは原則 `src/pages/**` の公開ページ変更だけです。検索語、アクセス、ASP成果、収益額はMacローカルに残します。
+日次botが自動commitできるのは、既存 `src/pages/**` の安全な変更と、意味的に検証済みの `active → paused` Safety Pauseだけです。検索語、アクセス、ASP成果、収益額はMacローカルに残します。
 
 必要なら `LOCAL_BACKUP_DIR` を使い、Gitリポジトリ外へSHA-256付き世代バックアップできます。
 
@@ -51,14 +51,16 @@ optional low-cost AI editor
   ↓
 verify
   ↓
-public src/pages change only
+public page edit / safe offer pause only
   ↓
 GitHub
   ↓
 Cloudflare Pages build gate
+  ↓
+remote smoke
 ```
 
-- Node.js: 22+
+- Node.js: 22+ (`.node-version`で22.16.0を固定)
 - Astro: static-first
 - Hosting: Cloudflare Pages
 - DB: V1では不要
@@ -80,17 +82,21 @@ npm run verify          # ローカル品質ゲート
 npm run local:doctor    # 自動運転前の環境診断
 npm run launch:check    # 公開前の総合チェック
 npm run ops:summary     # 今日の運用状態を1枚にまとめる
+npm run remote:smoke    # 公開後の実HTTP確認
 ```
 
 `verify` は次を実行します。
 
-1. Commercial Intent + private backupの決定論的self-test
-2. tracked secret / private operational data検査
-3. readiness
-4. Astro type/content check
-5. content/freshness validation
-6. build
-7. 内部リンク・PR表記・canonical・sitemap・robots・health・Analytics整合Smoke Test
+1. URL安全性テスト
+2. 日次run排他lockテスト
+3. private backup復元・改ざん拒否テスト
+4. Commercial Intent / Content Gap / Safety Pause等の決定論的self-test
+5. tracked secret / private operational data検査
+6. readiness
+7. Astro type/content check
+8. content/freshness validation
+9. build
+10. 内部リンク・PR表記・canonical・sitemap・robots・health・Analytics/affiliate CTA整合Smoke Test
 
 ## サイト基本情報を設定
 
@@ -99,10 +105,10 @@ JSONを直接編集しなくても設定できます。
 ```bash
 npm run site:configure -- \
   --name "サイト名" \
-  --url "https://your-domain.example" \
+  --url "https://your-domain.jp" \
   --description "サイト説明" \
   --operator "運営者名" \
-  --contact "contact@example.jp"
+  --contact "contact@your-domain.jp"
 ```
 
 このコマンドは `PUBLIC_READY` を変更しません。
@@ -125,6 +131,15 @@ npm run offer:activate -- my-offer --confirm-rules-reviewed
 
 案件は必ずdraftから開始し、ASP/広告主条件を人間が確認した後だけactive化します。AIは案件を勝手にactive化しません。
 
+案件終了・期限切れ・重要条件不整合など、安全側に倒す必要がある場合は:
+
+```bash
+npm run offer:pause -- my-offer --reason "campaign ended"
+npm run offer:safety-scan
+```
+
+日次botのSafety Scanは **active → pausedのみ** を自動化します。事実・URL・タグを書き換えたり、draft/pausedをactiveへ戻したりしません。
+
 ## Search Console
 
 `.env.local`へ設定すると各npmコマンドが自動で読み込みます。
@@ -134,7 +149,12 @@ GSC_CLIENT_EMAIL=
 GSC_PRIVATE_KEY=
 GSC_SITE_URL=
 GSC_DATA_MAX_AGE_HOURS=72
+GSC_MAX_PAGES=4
 ```
+
+Search Analytics APIは1レスポンス最大25,000行なので、`startRow`でページングします。`GSC_MAX_PAGES`は1回の日次取得で読むページ数の安全上限です。
+
+ただしGoogle Search Console側の内部制限により、`query/page`の詳細データは全検索語を完全列挙できるとは限りません。`Content Gap`は「観測できた検索意図」からの提案として扱い、全検索語を網羅した一覧とはみなしません。
 
 ```bash
 npm run gsc:fetch
@@ -252,6 +272,7 @@ npm run editor:ai
 ```text
 LOCAL_AUTOMATION_ENABLED=true
 LOCAL_AUTO_PUSH=false
+LOCAL_RUN_LOCK_MAX_AGE_HOURS=6
 ```
 
 事前診断:
@@ -265,6 +286,8 @@ npm run local:doctor
 ```bash
 npm run local:daily
 ```
+
+`local:daily`は`logs/local-daily.lock`を排他的に取得します。手動実行とlaunchdが重なった場合、後発runは何も変更せず停止します。古いlockでも同じMac上のPIDが生きていれば奪いません。
 
 十分確認した後だけ `LOCAL_AUTO_PUSH=true` にします。
 
@@ -295,14 +318,26 @@ LOCAL_BACKUP_REQUIRED=false
 手動確認:
 
 ```bash
+npm run local:permissions
 npm run local:backup
 npm run local:backup:verify
 ```
 
-- Gitリポジトリ外のみ許可
+- Gitリポジトリ外へ**実体パスで**解決できる場所だけ許可
 - `.env.local` / private key / raw A8 CSV / Git履歴はコピーしない
+- symlinkはバックアップ対象から除外
 - 各snapshotにSHA-256 manifest
+- `latest.json`も検証時にrepo外へのpath/symlink escapeを拒否
 - `LOCAL_BACKUP_REQUIRED=true`ならbackup/verify失敗時に自動commitを停止
+- POSIX環境ではprivate file 600 / directory 700をbest-effortで適用
+
+復元:
+
+```bash
+npm run local:backup:restore -- --latest --confirm
+```
+
+復元前にmanifestのサイズ・SHA-256・path・symlinkをすべて検証します。Search Console / GA4 / ASP正規化成果 / AI使用量 / reportsだけが復元対象で、`.env.local`、案件設定、`src/`、raw CSV、Git履歴は変更しません。
 
 ## CIなしのCloudflare公開
 
@@ -318,10 +353,29 @@ known preview branchで `PUBLIC_READY=true` はbuild失敗します。`PUBLIC_RE
 デプロイ後:
 
 ```text
-https://your-domain.example/health.json
+https://your-domain.jp/health.json
 ```
 
 で実際のbranch/commit/publicReadyを確認できます。
+
+さらにMac側から:
+
+```bash
+npm run remote:smoke
+```
+
+`.env.local`:
+
+```text
+REMOTE_SITE_URL=https://your-domain.jp
+REMOTE_EXPECT_PUBLIC=true
+REMOTE_REQUIRE_COMMIT_MATCH=false
+REMOTE_SMOKE_TIMEOUT_MS=10000
+```
+
+`remote:smoke`はhealth / robots / sitemap / top / comparison / privacy / external-transmissionへ実HTTPでアクセスし、noindex、canonical origin、publicReady、branch、想定外の別origin redirectを確認します。
+
+Cloudflareへ反映されたcommitまでローカルHEADと一致させたい時だけ `REMOTE_REQUIRE_COMMIT_MATCH=true` にします。
 
 ## 公開直前
 
@@ -333,7 +387,7 @@ npm run launch:check
 
 ```text
 local:doctor
-→ strict readiness
+→ strict readiness（初回公開はactive案件必須）
 → full production verification
 ```
 
@@ -344,16 +398,19 @@ local:doctor
 ## 安全思想
 
 - AIが外部情報を勝手に事実化しない
-- active案件の事実が期限切れならbuild停止
+- active案件の事実が期限切れならSafety Pause/build gateで止める
 - active案件のURL・公式情報源はHTTPSのみ
 - A8以外へ未知の追跡パラメータを勝手に付けない
 - AI停止中でも静的サイトと収益導線は稼働する
 - 古いGSC/GAデータでは自動編集しない
 - 確定収益ページを自動変更より優先保護する
 - 新規ページはSearch Consoleから提案のみ、自動量産しない
-- ローカルbotは `src/pages/**` 以外を自動commitしない
+- ローカルbotのページ変更は既存ページの`M`だけ。新規/削除/renameは拒否する
+- 案件の自動変更は意味的に検証済みの`active → paused`だけ
 - operational data / secretsがtrackedならverifyを失敗させる
+- private backupはGit実体パス外のみ許可する
 - Cloudflare build gateが落ちた変更は公開しない
+- 公開後は`remote:smoke`で実HTTP状態を確認できる
 
 詳細:
 
