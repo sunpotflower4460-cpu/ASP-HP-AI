@@ -4,12 +4,14 @@ V1はコード側をほぼ無料で動かせます。本人確認・ASP提携・
 
 ## 0. ローカル準備
 
-Node.js 22+ を使用します。
+Node.js 22+ を使用します。`.node-version` は `22.16.0` に固定しています。
 
 ```bash
 npm install
 cp .env.local.example .env.local
 ```
+
+`npm install`で生成される `package-lock.json` は本番公開前にcommitします。初回 `launch:check` はlockfileが無い/不整合の場合に停止します。
 
 最初は:
 
@@ -30,10 +32,10 @@ EDITOR_AUTO_APPLY_TITLE=false
 ```bash
 npm run site:configure -- \
   --name "サイト名" \
-  --url "https://your-domain.example" \
+  --url "https://your-domain.jp" \
   --description "サイト説明" \
   --operator "運営者名" \
-  --contact "contact@example.jp"
+  --contact "contact@your-domain.jp"
 ```
 
 `data/site.json`を直接編集しても構いません。
@@ -57,7 +59,7 @@ Cloudflare PagesをこのGitHubリポジトリへ直接接続します。
 - Build command: `npm run cloudflare:build`
 - Build output directory: `dist`
 - Root directory: repository root
-- Node.js: 22+
+- Node.js: `.node-version` の22.16.0
 
 Preview環境:
 
@@ -90,6 +92,15 @@ npm run offer:activate -- my-offer --confirm-rules-reviewed
 ```
 
 必ずdraftから開始します。AIは案件をactive化しません。
+
+案件終了・期限切れ等は:
+
+```bash
+npm run offer:pause -- my-offer --reason "campaign ended"
+npm run offer:safety-scan
+```
+
+Safety Scanは `active → paused` だけを自動化し、案件内容やFactを勝手に書き換えません。
 
 A8成果は公式CSVを使用します。
 
@@ -137,7 +148,12 @@ GSC_CLIENT_EMAIL=
 GSC_PRIVATE_KEY=
 GSC_SITE_URL=
 GSC_DATA_MAX_AGE_HOURS=72
+GSC_MAX_PAGES=4
 ```
+
+Search Analyticsは1レスポンス最大25,000行なので `startRow` でページングします。`GSC_MAX_PAGES` は1回の取得上限です。
+
+ただし `query/page` の詳細データはSearch Console内部制限により完全列挙が保証されません。Content Gapは「観測できた検索意図」からの提案として扱います。
 
 確認:
 
@@ -233,6 +249,14 @@ imports/
 
 `npm run security`でもtracked状態を検査します。
 
+### private permissions
+
+```bash
+npm run local:permissions
+```
+
+POSIX環境ではprivate file 600 / directory 700へbest-effortで補正します。symlinkは変更しません。
+
 ### private backup（任意）
 
 `.env.local`:
@@ -248,7 +272,25 @@ npm run local:backup
 npm run local:backup:verify
 ```
 
-バックアップ先はGitリポジトリ外のみ許可され、SHA-256で整合性確認します。
+バックアップ先は**実体パスでGitリポジトリ外**のみ許可されます。symlinkを経由してrepo内へ戻るパスも拒否します。各ファイルはSHA-256で検証します。
+
+復元:
+
+```bash
+npm run local:backup:restore -- --latest --confirm
+```
+
+復元前にsnapshot全体を検証し、改ざん/欠損/パス逃げが1つでもあれば現在のローカルデータを削除する前に停止します。
+
+復元対象:
+
+- `data/search-console/`
+- `data/analytics/`
+- `data/affiliate/`
+- `data/ai-usage/`
+- `reports/`
+
+`.env.local`、`data/offers/`、`src/`、raw A8 CSV、Git履歴は変更しません。
 
 ## 9. ローカル自動運転を診断
 
@@ -261,26 +303,42 @@ npm run local:doctor
 主に次を確認します。
 
 - main branch / clean worktree
+- Node 22+
 - 公開URL
+- `GSC_MAX_PAGES`
 - GSC / GA / VCの設定整合
 - AI設定整合
 - backup必須条件
 - backup先がrepo外かつ書込み可能か
-- Node/platform
+- remote smoke設定
+- run-lock設定
+- platform
+
+日次運転:
+
+```text
+LOCAL_AUTOMATION_ENABLED=true
+LOCAL_AUTO_PUSH=false
+LOCAL_RUN_LOCK_MAX_AGE_HOURS=6
+```
+
+`local:daily`は `logs/local-daily.lock` を排他的に取得します。手動実行とlaunchdが重なった場合、後発runは停止します。古いlockでも同じMac上のPIDが生きていれば奪いません。
 
 ## 10. 公開前総合チェック
 
-実ドメイン・運営者情報・active案件まで揃ったら:
+実ドメイン・運営者情報・active案件・`package-lock.json`まで揃ったら:
 
 ```bash
+npm run lock:check
 npm run launch:check
 ```
 
-これは:
+`launch:check` は:
 
 ```text
 local:doctor
-→ strict readiness
+→ dependency lock check
+→ strict readiness（初回公開はactive案件必須）
 → production verification
 ```
 
@@ -305,7 +363,7 @@ local:doctor
 
 ```text
 PUBLIC_READY=true
-SITE_URL=https://your-domain.example
+SITE_URL=https://your-domain.jp
 ```
 
 へ変更します。
@@ -318,6 +376,29 @@ Cloudflare側で再buildされ、strict gateをPASSした場合のみ公開さ�
 npm run gsc:submit
 ```
 
+実サイト確認:
+
+```text
+REMOTE_SITE_URL=https://your-domain.jp
+REMOTE_EXPECT_PUBLIC=true
+REMOTE_REQUIRE_COMMIT_MATCH=false
+REMOTE_SMOKE_TIMEOUT_MS=10000
+```
+
+```bash
+npm run remote:smoke
+```
+
+`remote:smoke`はhealth / robots / sitemap / top / comparison / privacy / external-transmissionへ実HTTPでアクセスし、noindex・canonical・publicReady・branch・別origin redirectを検査します。
+
+Cloudflareのcommit SHAまでローカルHEADと一致させたい場合だけ:
+
+```text
+REMOTE_REQUIRE_COMMIT_MATCH=true
+```
+
+にします。
+
 ## 12. 日次自動運転（CI不要）
 
 最初は:
@@ -325,6 +406,7 @@ npm run gsc:submit
 ```text
 LOCAL_AUTOMATION_ENABLED=true
 LOCAL_AUTO_PUSH=false
+LOCAL_RUN_LOCK_MAX_AGE_HOURS=6
 ```
 
 手動テスト:
@@ -334,7 +416,9 @@ npm run local:doctor
 npm run local:daily
 ```
 
-公開ページ変更がある場合だけlocal commitが作られます。検索/収益データはlocal-onlyです。
+公開ページの既存ファイル変更、または意味的に検証済みの `active → paused` Safety Pauseがある場合だけlocal commitが作られます。検索/収益データはlocal-onlyです。
+
+新規ページ・ページ削除・rename・予期しないtracked/untrackedファイルは自動commit前に停止します。
 
 問題なければ:
 
