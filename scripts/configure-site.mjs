@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { isSafeHttpsUrl } from './lib/url-safety.mjs';
+import { isSafeSiteBaseUrl } from './lib/url-safety.mjs';
 
 const file = 'data/site.json';
 const current = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -39,12 +39,10 @@ if (!String(next.contact || '').trim()) errors.push('contact is required.');
 
 try {
   const url = new URL(String(next.url || ''));
-  if (!isSafeHttpsUrl(url.toString())) errors.push('url must be a real HTTPS URL without credentials/placeholders/local hosts.');
-  if (url.search || url.hash) errors.push('url must not include query/hash.');
-  url.pathname = url.pathname.replace(/\/+$/, '') || '/';
-  next.url = url.toString().replace(/\/$/, '');
+  if (!isSafeSiteBaseUrl(url.toString())) errors.push('url must be a real HTTPS origin URL with no subpath/query/hash/credentials/placeholders/local hosts.');
+  next.url = url.origin;
 } catch {
-  errors.push('url must be a valid absolute HTTPS URL.');
+  errors.push('url must be a valid absolute HTTPS origin URL.');
 }
 
 for (const key of ['name', 'operator', 'contact']) {
