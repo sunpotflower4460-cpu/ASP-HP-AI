@@ -12,8 +12,13 @@ const base = new URL(configured);
 const expectPublic = process.env.REMOTE_EXPECT_PUBLIC !== 'false';
 const timeoutMs = Math.max(1000, Math.min(60000, Number(process.env.REMOTE_SMOKE_TIMEOUT_MS || 10000)));
 const requireCommitMatch = process.env.REMOTE_REQUIRE_COMMIT_MATCH === 'true';
+const productionBranch = String(process.env.PRODUCTION_BRANCH || 'main').trim();
 const failures = [];
 const observations = [];
+
+if (!/^[A-Za-z0-9._/-]+$/.test(productionBranch) || productionBranch.startsWith('/') || productionBranch.endsWith('/')) {
+  throw new Error('PRODUCTION_BRANCH contains unsupported characters.');
+}
 
 function localHead() {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
@@ -78,8 +83,8 @@ if (health) {
   if (Boolean(health.publicReady) !== expectPublic) {
     failures.push(`/health.json: publicReady=${health.publicReady} but REMOTE_EXPECT_PUBLIC=${expectPublic}`);
   }
-  if (expectPublic && health.branch && health.branch !== 'main') {
-    failures.push(`/health.json: public deployment reports unexpected branch '${health.branch}'`);
+  if (expectPublic && health.branch && health.branch !== productionBranch) {
+    failures.push(`/health.json: public deployment reports branch '${health.branch}', expected '${productionBranch}'`);
   }
   if (requireCommitMatch) {
     const head = localHead();
@@ -128,6 +133,7 @@ const report = {
   generatedAt: new Date().toISOString(),
   site: base.origin,
   expectPublic,
+  productionBranch,
   requireCommitMatch,
   localHead: head,
   remoteCommitSha: health?.commitSha || null,
@@ -144,4 +150,4 @@ if (failures.length) {
   console.error(`Remote smoke test failed:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }
-console.log(`Remote smoke test passed (${observations.length} endpoint(s), public=${expectPublic}).`);
+console.log(`Remote smoke test passed (${observations.length} endpoint(s), public=${expectPublic}, branch=${productionBranch}).`);
