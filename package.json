@@ -1,0 +1,47 @@
+{
+  "name": "asp-hp-ai",
+  "version": "0.13.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "check": "astro check",
+    "self-test": "node scripts/self-test.mjs",
+    "security": "node scripts/security-scan.mjs",
+    "validate": "node scripts/validate-content.mjs",
+    "freshness": "node scripts/check-freshness.mjs",
+    "readiness": "node scripts/readiness-check.mjs",
+    "smoke": "node scripts/site-smoke.mjs",
+    "build": "npm run validate && npm run freshness && astro build && npm run smoke",
+    "verify": "node scripts/verify.mjs",
+    "verify:prod": "VERIFY_PRODUCTION=true node scripts/verify.mjs",
+    "ops:summary": "node scripts/ops-summary.mjs",
+    "cloudflare:build": "node scripts/cloudflare-build.mjs",
+    "preview": "astro preview",
+    "local:daily": "node scripts/local-daily.mjs",
+    "local:install": "node scripts/install-launchd.mjs",
+    "local:uninstall": "node scripts/uninstall-launchd.mjs",
+    "offer:new": "node scripts/create-offer.mjs",
+    "offer:check": "node scripts/offer-readiness.mjs",
+    "offer:activate": "node scripts/activate-offer.mjs",
+    "gsc:fetch": "node scripts/fetch-gsc.mjs",
+    "gsc:submit": "node scripts/submit-sitemap.mjs",
+    "ga:fetch": "node scripts/fetch-ga.mjs",
+    "a8:import": "node scripts/import-a8.mjs",
+    "vc:fetch": "node scripts/fetch-valuecommerce.mjs",
+    "affiliate:normalize": "node scripts/normalize-affiliate.mjs",
+    "analyze": "node scripts/daily-analysis.mjs",
+    "editor:plan": "node scripts/editor-plan.mjs",
+    "editor:ai": "node scripts/editor-ai.mjs",
+    "editor:apply": "node scripts/apply-title-proposal.mjs",
+    "daily": "node scripts/daily-run.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.3",
+    "astro": "7.1.6"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "7.0.2"
+  }
+}

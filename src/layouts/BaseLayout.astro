@@ -1,0 +1,88 @@
+---
+import Disclosure from '../components/Disclosure.astro';
+import site from '../../data/site.json';
+import pages from '../../data/pages.json';
+import '../styles/global.css';
+
+interface Props { title: string; description?: string; }
+const { title, description = site.description } = Astro.props;
+const publicReady = import.meta.env.PUBLIC_READY === 'true';
+const siteBase = Astro.site || new URL(import.meta.env.SITE_URL || site.url || 'https://example.com');
+const canonical = new URL(Astro.url.pathname, siteBase);
+const normalizedPath = Astro.url.pathname === '/' ? '/' : `${Astro.url.pathname.replace(/\/+$/, '')}/`;
+const pageMeta = pages.find((page) => page.path === normalizedPath);
+const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: site.name,
+      url: siteBase.toString(),
+      description: site.description
+    },
+    {
+      '@type': 'WebPage',
+      name: `${title} | ${site.name}`,
+      url: canonical.toString(),
+      description,
+      ...(pageMeta?.lastReviewedAt ? { dateModified: pageMeta.lastReviewedAt } : {})
+    }
+  ]
+};
+const analyticsScript = analyticsEnabled ? `
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', ${JSON.stringify(gaMeasurementId)});
+document.addEventListener('click', function(event) {
+  var target = event.target instanceof Element ? event.target.closest('a[data-affiliate-click="true"]') : null;
+  if (!target || typeof window.gtag !== 'function') return;
+  window.gtag('event', 'affiliate_click', {
+    affiliate_asp: target.dataset.asp || '',
+    offer_id: target.dataset.offerId || '',
+    page_id: target.dataset.pageId || '',
+    cta_id: target.dataset.ctaId || '',
+    position_id: target.dataset.positionId || ''
+  });
+});` : '';
+---
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title} | {site.name}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.toString()} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={`${title} | ${site.name}`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.toString()} />
+    <meta name="twitter:card" content="summary" />
+    {!publicReady && <meta name="robots" content="noindex,nofollow" />}
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+    {analyticsEnabled && <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}></script>}
+    {analyticsEnabled && <script is:inline set:html={analyticsScript}></script>}
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="/" class="brand">{site.name}</a>
+      <nav aria-label="主要メニュー"><a href="/guide/rental-internet/">選び方</a><a href="/comparison/">比較</a><a href="/diagnosis/">3問診断</a><a href="/faq/">FAQ</a></nav>
+    </header>
+    <Disclosure />
+    {pageMeta?.lastReviewedAt && (
+      <aside class="page-review-meta" aria-label="ページ情報">
+        <span>内容確認日: {pageMeta.lastReviewedAt}</span> · <a href="/about/">編集・比較方針</a>
+      </aside>
+    )}
+    <main><slot /></main>
+    <footer>
+      <nav><a href="/about/">運営方針</a><a href="/disclosure/">広告・比較方針</a><a href="/privacy/">プライバシー</a><a href="/external-transmission/">外部送信</a><a href="/contact/">お問い合わせ</a></nav>
+      <small>© {new Date().getFullYear()} {site.name}</small>
+    </footer>
+  </body>
+</html>

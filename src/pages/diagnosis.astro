@@ -1,0 +1,90 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="3問でネット環境の方向性を整理" description="工事可否・用途・居住期間の3問から、先に比較すべきネット環境の方向性と確認ページを整理します。">
+  <section class="card">
+    <h1>3問でネット環境の方向性を整理</h1>
+    <p>特定サービスを自動で「おすすめ」する診断ではありません。最初に<strong>どの種類・条件を優先して比較すべきか</strong>を整理し、その後で確認済み案件だけを比較します。</p>
+    <div id="quiz"></div>
+  </section>
+  <script is:inline>
+    const quiz = document.querySelector('#quiz');
+    const state = {};
+    const questions = [
+      ['construction','回線工事はできますか？',[['yes','できる / できそう'],['no','できない / 避けたい'],['unknown','わからない']]],
+      ['use','主な用途は？',[['game','オンラインゲーム'],['work','在宅勤務'],['video','動画・普段使い']]],
+      ['stay','居住予定は？',[['long','長め'],['short','短め / 未定']]]
+    ];
+    let index = 0;
+
+    function decide() {
+      if (state.construction === 'no') {
+        return {
+          title: '工事不要型を先に比較',
+          text: '工事を前提としない選択肢から絞り、その中で用途と契約期間に合うか確認します。',
+          focus: 'home-router',
+          guide: '/guide/no-construction/',
+          guideLabel: '工事できない場合の考え方'
+        };
+      }
+      if (state.stay === 'short') {
+        return {
+          title: '短期利用の総額と終了条件を優先',
+          text: '月額だけでなく、開始・利用中・終了時までを想定居住期間で比べます。',
+          focus: 'short-stay',
+          guide: '/guide/short-stay/',
+          guideLabel: '短期入居の考え方'
+        };
+      }
+      if (state.use === 'game') {
+        return {
+          title: '固定回線を優先候補にして比較',
+          text: '工事可能なら固定回線を先に確認し、接続方法や住居条件まで含めてゲーム用途に合うか判断します。',
+          focus: 'gaming',
+          guide: '/guide/gaming/',
+          guideLabel: 'ゲーム用途の確認項目'
+        };
+      }
+      if (state.use === 'work') {
+        return {
+          title: '仕事を止めない安定性を優先',
+          text: '会議・ファイル送受信・同時利用を想定し、固定回線を含む候補を仕事条件から比較します。',
+          focus: 'work',
+          guide: '/guide/work-from-home/',
+          guideLabel: '在宅勤務の確認項目'
+        };
+      }
+      return {
+        title: '固定回線と工事不要型を両方比較',
+        text: '特別に強い制約がないため、総額・導入のしやすさ・居住期間から両方を比べられます。',
+        focus: 'all',
+        guide: '/guide/fiber-vs-home-router/',
+        guideLabel: '光回線とホームルーターの比較軸'
+      };
+    }
+
+    function render(){
+      if(index >= questions.length){
+        const result = decide();
+        const compareUrl = result.focus === 'all' ? '/comparison/' : `/comparison/?focus=${encodeURIComponent(result.focus)}`;
+        quiz.innerHTML = `
+          <div class="diagnosis-result">
+            <p class="eyebrow">整理結果</p>
+            <h2>${result.title}</h2>
+            <p>${result.text}</p>
+            <div class="result-actions">
+              <a class="primary-link" href="${compareUrl}">この条件で確認済みサービスを比較 →</a>
+              <a href="${result.guide}">${result.guideLabel}を読む →</a>
+            </div>
+            <button class="choice" id="restart">もう一度診断する</button>
+          </div>`;
+        quiz.querySelector('#restart').addEventListener('click', () => { index = 0; for (const key of Object.keys(state)) delete state[key]; render(); });
+        return;
+      }
+      const [key,title,choices] = questions[index];
+      quiz.innerHTML = `<p class="eyebrow">${index + 1} / ${questions.length}</p><h2>${title}</h2>` + choices.map(([value,label]) => `<button class="choice" data-value="${value}">${label}</button>`).join('');
+      quiz.querySelectorAll('button[data-value]').forEach(btn => btn.addEventListener('click', () => { state[key] = btn.dataset.value; index++; render(); }));
+    }
+    render();
+  </script>
+</BaseLayout>

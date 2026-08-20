@@ -1,0 +1,16 @@
+[
+  {"id":"p001","path":"/","name":"トップ","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p010","path":"/comparison/","name":"比較基準","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p020","path":"/diagnosis/","name":"3問診断","editable":false,"lastReviewedAt":"2026-08-20"},
+  {"id":"p101","path":"/guide/rental-internet/","name":"賃貸の選び方","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p102","path":"/guide/no-construction/","name":"工事できない場合","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p103","path":"/guide/fiber-vs-home-router/","name":"光回線とホームルーター","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p104","path":"/guide/work-from-home/","name":"在宅勤務","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p105","path":"/guide/gaming/","name":"オンラインゲーム","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p106","path":"/guide/moving/","name":"引っ越し","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p107","path":"/guide/short-stay/","name":"短期居住","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p108","path":"/guide/cost-check/","name":"総額チェック","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p109","path":"/guide/contract-checklist/","name":"申込み前チェック","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p200","path":"/faq/","name":"FAQ","editable":true,"lastReviewedAt":"2026-08-20"},
+  {"id":"p201","path":"/glossary/","name":"用語集","editable":true,"lastReviewedAt":"2026-08-20"}
+]

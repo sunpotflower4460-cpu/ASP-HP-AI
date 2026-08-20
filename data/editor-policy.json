@@ -1,0 +1,11 @@
+{
+  "maxDailyCandidates": 2,
+  "maxAiCallsPerRun": 1,
+  "minImpressionsForTitleReview": 20,
+  "minCtrForProtection": 0.03,
+  "minimumTitleLength": 10,
+  "maximumTitleLength": 60,
+  "autoApply": {
+    "title": false
+  }
+}

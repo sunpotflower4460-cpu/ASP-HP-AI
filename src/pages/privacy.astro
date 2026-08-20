@@ -1,0 +1,23 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getActiveOffers } from '../lib/offers';
+const asps = [...new Set(getActiveOffers().map((offer) => offer.asp))];
+const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
+---
+<BaseLayout title="プライバシーポリシー">
+  <article class="card">
+    <h1>プライバシーポリシー</h1>
+    <h2>基本方針</h2><p>当サイトは、運営に不要な個人情報を積極的に収集しない構成を基本とします。</p>
+    <h2>アフィリエイト広告</h2><p>当サイトにはアフィリエイト広告が含まれる場合があります。広告リンクをクリックするとASP・広告主のサイトへ移動し、それぞれのサービス上で成果計測が行われる場合があります。</p>
+    <p>現在設定されているASP: {asps.length ? asps.join(' / ') : 'なし'}</p>
+    <h2>アクセス解析</h2>
+    {analyticsEnabled ? (
+      <p>当サイトではGoogle Analyticsを利用しています。ページ閲覧情報やブラウザ・端末等の情報に加え、アフィリエイトリンクをクリックした際は、個人情報を意図して含めないページID・案件ID・CTA位置等の識別情報を「affiliate_click」イベントとして送信します。利用目的は、サイト改善と広告導線の効果測定です。</p>
+    ) : (
+      <p>現在、Google Analytics等の追加アクセス解析は有効化していません。導入する場合は、実際に利用するサービス・送信情報・利用目的を本ページへ反映します。</p>
+    )}
+    <h2>外部送信</h2><p><a href="/external-transmission/">外部送信・アフィリエイト計測について</a>をご確認ください。</p>
+    <h2>変更</h2><p>利用するサービスや法令・ガイドラインの変更に応じて内容を見直します。</p>
+  </article>
+</BaseLayout>
