@@ -1,6 +1,6 @@
 # Offer setup
 
-実案件は **作成 → 検査 → 人間がASP/広告主条件を確認 → 明示的に有効化** の順で登録します。AIや日次Workflowが勝手に案件をactiveへ変更する設計にはしていません。
+実案件は **作成 → 検査 → 人間がASP/広告主条件を確認 → 明示的に有効化** の順で登録します。AIや日次botが勝手に案件をactiveへ変更する設計にはしていません。
 
 ## 1. A8案件をdraft作成
 
@@ -84,10 +84,43 @@ npm run offer:check -- sample-a8
 npm run offer:activate -- sample-a8 --confirm-rules-reviewed
 ```
 
-Activation時に再度validationとfreshnessを実行し、失敗した場合はファイルを元のdraftへ自動ロールバックします。
+Activation時には案件単体だけでなく、**サイト全体の `npm run verify`** を実行します。
+
+- deterministic self-test
+- secret / private-data scan
+- readiness
+- Astro check
+- content / freshness
+- build
+- internal link / disclosure / canonical / sitemap / robots / health / Analytics smoke test
+
+のどこかが失敗した場合は、案件ファイルをactivation前の状態へ自動ロールバックします。
 
 activeになった案件は比較ページへ自動表示されます。A8ではCTAにpage/offer/CTA/positionの追跡IDが付きます。
+
+## 7. 案件終了・一時停止
+
+広告主側で案件が終了した、提携状態に不安がある、条件確認が必要になった場合は、activeのまま放置せず即座にpauseできます。
+
+```bash
+npm run offer:pause -- sample-a8 --reason "campaign ended"
+```
+
+`paused`案件はCTAが無効になります。
+
+pauseは安全側の操作なので、その後のfull-site verifyが別要因で失敗しても**activeへ自動で戻しません**。paused状態を維持したままエラーを出します。
+
+再開する場合は、最新のASP/広告主条件・Fact・TTLをもう一度確認した上で:
+
+```bash
+npm run offer:check -- sample-a8
+npm run offer:activate -- sample-a8 --confirm-rules-reviewed
+```
+
+とします。
 
 ## 更新時
 
 料金・条件・summaryなどを変更した場合は、必ず該当Factの `source` と `checkedAt` を更新します。TTLを超えたactive案件はbuild自体が失敗するため、古い条件のまま再公開しにくい構造です。
+
+案件URLへ `example.com` 等のプレースホルダー、HTTP URL、埋め込み認証情報を残したactive化もvalidationで拒否します。
