@@ -48,18 +48,21 @@ assert.ok(
   'future-dated fact guard must be reported explicitly'
 );
 
-// Deterministic local-backup test. No network, API credential or GitHub Actions required.
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asp-hp-ai-selftest-'));
 const fixtureRepo = path.join(fixtureRoot, 'repo');
 const backupRoot = path.join(fixtureRoot, 'private-backups');
 fs.mkdirSync(path.join(fixtureRepo, 'data', 'search-console'), { recursive: true });
 fs.mkdirSync(path.join(fixtureRepo, 'data', 'analytics'), { recursive: true });
 fs.mkdirSync(path.join(fixtureRepo, 'data', 'affiliate'), { recursive: true });
+fs.mkdirSync(path.join(fixtureRepo, 'data', 'offers'), { recursive: true });
 fs.mkdirSync(path.join(fixtureRepo, 'reports'), { recursive: true });
 fs.writeFileSync(path.join(fixtureRepo, 'data', 'search-console', 'latest.json'), '{"rows":[]}\n');
 fs.writeFileSync(path.join(fixtureRepo, 'data', 'analytics', 'latest.json'), '{"rows":[]}\n');
 fs.writeFileSync(path.join(fixtureRepo, 'data', 'affiliate', 'normalized-latest.json'), '{"totals":{}}\n');
 fs.writeFileSync(path.join(fixtureRepo, 'reports', 'latest.json'), '{"ok":true}\n');
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'decision-tags.json'), JSON.stringify([
+  { id: 'home-router', label: 'Home router', filter: true }
+], null, 2));
 
 const backupScript = path.resolve('scripts/local-backup-safe.mjs');
 const verifyBackupScript = path.resolve('scripts/local-backup-verify.mjs');
@@ -90,6 +93,75 @@ const unsafeBackupResult = spawnSync(process.execPath, [backupScript], {
   encoding: 'utf8'
 });
 assert.notEqual(unsafeBackupResult.status, 0, 'backup inside public repository must be rejected');
+
+// Deterministic offer safety scan: unsafe active pauses, safe active stays active,
+// draft stays draft. The safety scan is removal-only.
+const safetyScript = path.resolve('scripts/offer-safety-scan.mjs');
+const today = new Date().toISOString().slice(0, 10);
+const oldDate = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+const offerBase = {
+  asp: 'a8',
+  affiliateUrl: 'https://affiliate.invalid/click',
+  officialUrl: 'https://service.invalid/',
+  allowedMedia: ['web'],
+  decisionTags: ['home-router']
+};
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'offers', 'unsafe.json'), JSON.stringify({
+  ...offerBase,
+  id: 'unsafe_offer',
+  name: 'Unsafe active offer',
+  status: 'active',
+  facts: {
+    summary: {
+      value: '十分な長さを持つ期限切れの説明文テストです。',
+      source: 'https://service.invalid/fact',
+      checkedAt: oldDate,
+      ttlDays: 1
+    }
+  }
+}, null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'offers', 'safe.json'), JSON.stringify({
+  ...offerBase,
+  id: 'safe_offer',
+  name: 'Safe active offer',
+  status: 'active',
+  facts: {
+    summary: {
+      value: '十分な長さを持つ最新の説明文テストです。',
+      source: 'https://service.invalid/fact',
+      checkedAt: today,
+      ttlDays: 30
+    }
+  }
+}, null, 2));
+fs.writeFileSync(path.join(fixtureRepo, 'data', 'offers', 'draft.json'), JSON.stringify({
+  ...offerBase,
+  id: 'draft_offer',
+  name: 'Draft offer',
+  status: 'draft',
+  facts: {
+    summary: {
+      value: 'draft案件は自動でactive化されないことを確認します。',
+      source: 'https://service.invalid/fact',
+      checkedAt: today,
+      ttlDays: 30
+    }
+  }
+}, null, 2));
+
+const safetyResult = spawnSync(process.execPath, [safetyScript], {
+  cwd: fixtureRepo,
+  env: { ...process.env },
+  encoding: 'utf8'
+});
+assert.equal(safetyResult.status, 0, `offer safety scan should succeed: ${safetyResult.stderr || safetyResult.stdout}`);
+const unsafeAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'unsafe.json'), 'utf8'));
+const safeAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'safe.json'), 'utf8'));
+const draftAfter = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'data', 'offers', 'draft.json'), 'utf8'));
+assert.equal(unsafeAfter.status, 'paused', 'expired active offer must auto-pause');
+assert.ok(String(unsafeAfter.pauseReason || '').startsWith('auto safety pause:'), 'auto-pause reason must be explicit');
+assert.equal(safeAfter.status, 'active', 'valid active offer must remain active');
+assert.equal(draftAfter.status, 'draft', 'draft offer must never auto-activate');
 
 // Deterministic Search Console content-gap planner test.
 const gapScript = path.resolve('scripts/content-gap-plan.mjs');
@@ -148,4 +220,4 @@ const stalePlan = JSON.parse(fs.readFileSync(path.join(fixtureRepo, 'reports', '
 assert.equal(stalePlan.candidates.length, 0, 'stale Search Console data must not produce content-gap candidates');
 
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
-console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; future fact, private backup and content-gap guards verified.`);
+console.log(`Self-test passed. Scores: outbound=${outbound}, pending=${pending}, confirmed=${confirmed}, capped=${capped}; future fact, private backup, offer safety pause and content-gap guards verified.`);
