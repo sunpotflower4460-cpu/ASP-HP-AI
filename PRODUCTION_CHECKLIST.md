@@ -6,7 +6,7 @@
 
 - [ ] `main`へ移動し、`git pull --ff-only origin main`でGitHub上の最新mainへ同期する。
 - [ ] `git status --short --branch`がcleanであることを確認し、作業branchを作る。
-- [ ] `.node-version`どおりNode.js 22.16.0を使用する。
+- [ ] `.node-version`どおりNode.js 22.23.2を使用する。
 - [ ] lockfileが無い場合は `npm install --package-lock-only` で実生成し、`package-lock.json`をcommit対象にする。
 - [ ] `npm ci`を成功させる。
 - [ ] `npm run lock:check`を成功させる。
@@ -22,7 +22,7 @@
 
 ## 3. 外部サービスを接続する
 
-- [ ] Cloudflare PagesをGit連携し、Production branch=`main`、Build command=`npm run cloudflare:build`、Output=`dist`、Node=22.16.0にする。GitHub Actionsは追加しない。
+- [ ] Cloudflare PagesをGit連携し、Production branch=`main`、Build command=`npm run cloudflare:build`、Output=`dist`、Node=22.23.2にする。GitHub Actionsは追加しない。
 - [ ] Search Consoleの所有権確認とサービスアカウント追加を行い、ローカルの `.env.local` に `GSC_CLIENT_EMAIL`、`GSC_PRIVATE_KEY`、`GSC_SITE_URL`を設定して `npm run gsc:fetch`を確認する。
 - [ ] GA4を使う場合だけ `PUBLIC_GA_MEASUREMENT_ID` とData API設定を追加する。使わない場合は空のままにする。
 - [ ] Cloudflare Preview/Productionの確認中は `PUBLIC_READY=false` にする。Preview branchでtrueにしない。

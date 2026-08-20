@@ -3,7 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { getActiveOffers } from '../lib/offers';
 
 const activeAsps = [...new Set(getActiveOffers().map((offer) => offer.asp.toLowerCase()))];
-const labels = { a8: 'A8.net', valuecommerce: 'バリューコマース' };
+const labels: Record<string, string> = { a8: 'A8.net', valuecommerce: 'バリューコマース' };
 const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
 ---

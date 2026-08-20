@@ -4,7 +4,7 @@ V1はコード側をほぼ無料で動かせます。本人確認・ASP提携・
 
 ## 0. ローカル準備
 
-Node.js 22+ を使用します。`.node-version` は `22.16.0` に固定しています。
+Node.js 22+ を使用します。`.node-version` は `22.23.2` に固定しています。
 
 ```bash
 npm install
@@ -59,7 +59,7 @@ Cloudflare PagesをこのGitHubリポジトリへ直接接続します。
 - Build command: `npm run cloudflare:build`
 - Build output directory: `dist`
 - Root directory: repository root
-- Node.js: `.node-version` の22.16.0
+- Node.js: `.node-version` の22.23.2
 
 Preview環境:
 

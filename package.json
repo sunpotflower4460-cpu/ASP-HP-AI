@@ -53,7 +53,7 @@
     "daily": "node scripts/daily-run.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.3",
