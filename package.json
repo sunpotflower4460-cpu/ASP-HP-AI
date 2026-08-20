@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,6 +17,7 @@
     "readiness": "node scripts/readiness-check.mjs",
     "smoke": "node scripts/site-smoke.mjs",
     "remote:smoke": "node scripts/remote-smoke.mjs",
+    "remote:wait": "node scripts/post-push-remote-verify.mjs",
     "build": "npm run validate && npm run freshness && astro build && npm run smoke",
     "verify": "node scripts/verify.mjs",
     "verify:prod": "VERIFY_PRODUCTION=true node scripts/verify.mjs",
