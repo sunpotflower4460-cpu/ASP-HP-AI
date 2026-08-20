@@ -85,8 +85,11 @@ for (const action of report.nextActions || []) {
       outboundClicksPerSearchClick: commercial?.outboundClicksPerSearchClick ?? null,
       commercialIntentScore: Number(commercial?.intentScore ?? opportunity?.commercialIntentScore ?? 0),
       commercialIntentClass: commercial?.intentClass ?? opportunity?.commercialIntentClass ?? 'weak',
-      confirmedYen: Number(commercial?.confirmedYen || 0),
-      pendingYen: Number(commercial?.pendingYen || 0)
+      confirmedYen: Number(commercial?.confirmedYen ?? opportunity?.confirmedYen ?? 0),
+      pendingYen: Number(commercial?.pendingYen || 0),
+      confirmedYenPerSearchClick: commercial?.confirmedYenPerSearchClick ?? opportunity?.confirmedYenPerSearchClick ?? null,
+      confirmedYenPerAffiliateClick: commercial?.confirmedYenPerAffiliateClick ?? opportunity?.confirmedYenPerAffiliateClick ?? null,
+      pendingYenPerAffiliateClick: commercial?.pendingYenPerAffiliateClick ?? null
     }
   });
 }
