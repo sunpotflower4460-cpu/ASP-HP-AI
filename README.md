@@ -8,7 +8,7 @@
 - A8 / ValueCommerce等をAdapter化
 - Search Consoleを主な観測データにする
 - AIは大量記事生成ではなく「必要な改善だけ」を行う
-- PR表記・事実ソース・情報鮮度・予算上限をコードで強制
+- PR表記・事実ソース・情報鮮度・AI呼び出し回数・予算上限をコードで強制
 - `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
 
@@ -70,7 +70,16 @@ CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
 npm run editor:ai
 ```
-第三者の有料モデルは `ALLOW_PAID_AI=true` を明示しない限り拒否します。`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護されます。
+
+### Cost Governor
+`data/budget.json` で月AI予算（初期値300円）と月間AI呼び出し上限（初期値40回）を強制します。AI呼び出しは `data/ai-usage/YYYY-MM.json` に記録されます。
+
+- 有料/第三者モデルは `ALLOW_PAID_AI=true` がない限り拒否
+- 有料利用を許可する場合は `AI_ESTIMATED_COST_PER_CALL_JPY` も必須
+- 予測費用が月予算を超える呼び出しは実行前に停止
+- 呼び出し回数上限を超える処理も実行前に停止
+
+`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護されます。
 
 ## 日次パイプライン
 ```bash
@@ -79,7 +88,7 @@ npm run daily
 GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` にするまで動きません。
 
 ## Cloudflare Pages自動公開
-`deploy-pages.yml` はmainへのpush時に動きますが、`CLOUDFLARE_DEPLOY_ENABLED=true` にするまでdeployしません。公開前にはreadiness/buildを必ず通します。
+`deploy-pages.yml` はmainへのサイト影響変更で動きますが、`CLOUDFLARE_DEPLOY_ENABLED=true` にするまでdeployしません。公開前にはreadiness/buildを必ず通します。
 
 ## 安全思想
 - AIが外部情報を勝手に事実として追加しない

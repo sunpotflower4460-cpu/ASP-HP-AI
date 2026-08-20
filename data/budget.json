@@ -1,5 +1,6 @@
 {
   "monthlyAiBudgetJpy": 300,
+  "maxAiCallsPerMonth": 40,
   "warnRatio": 0.7,
   "restrictRatio": 0.9,
   "hardStopRatio": 1.0

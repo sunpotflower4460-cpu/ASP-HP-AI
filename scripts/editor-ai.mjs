@@ -1,10 +1,12 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 const enabled = process.env.AI_EDITOR_ENABLED === 'true';
 if (!enabled) {
   console.log('AI editor disabled; skipping proposal generation.');
   process.exit(0);
 }
+
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 const model = process.env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
@@ -15,8 +17,34 @@ if (!accountId || !apiToken) throw new Error('Cloudflare AI credentials are requ
 const plan = JSON.parse(fs.readFileSync('reports/editor-plan.json', 'utf8'));
 const policy = JSON.parse(fs.readFileSync('data/editor-policy.json', 'utf8'));
 const rules = JSON.parse(fs.readFileSync('data/rules.json', 'utf8'));
+const budget = JSON.parse(fs.readFileSync('data/budget.json', 'utf8'));
 const maxCalls = Math.max(0, Math.min(3, Number(policy.maxAiCallsPerRun || 1)));
+const candidates = (plan.candidates || []).slice(0, maxCalls);
 const proposals = [];
+
+// Cost Governor: every AI call is counted. Paid use is refused unless an
+// explicit per-call estimate is supplied, so a future paid provider cannot be
+// enabled accidentally without a budget model.
+const month = new Date().toISOString().slice(0, 7);
+const usageDir = path.join('data', 'ai-usage');
+const usagePath = path.join(usageDir, `${month}.json`);
+fs.mkdirSync(usageDir, { recursive: true });
+const usage = fs.existsSync(usagePath)
+  ? JSON.parse(fs.readFileSync(usagePath, 'utf8'))
+  : { month, calls: 0, estimatedCostJpy: 0, byModel: {} };
+
+const estimatedCostPerCall = Number(process.env.AI_ESTIMATED_COST_PER_CALL_JPY ?? (allowPaid ? NaN : 0));
+if (allowPaid && !Number.isFinite(estimatedCostPerCall)) {
+  throw new Error('Paid AI requires AI_ESTIMATED_COST_PER_CALL_JPY so the monthly cost governor can enforce the budget.');
+}
+const projectedCalls = usage.calls + candidates.length;
+const projectedCost = usage.estimatedCostJpy + candidates.length * Math.max(0, estimatedCostPerCall || 0);
+if (projectedCalls > Number(budget.maxAiCallsPerMonth || 40)) {
+  throw new Error(`AI monthly call cap reached (${usage.calls}/${budget.maxAiCallsPerMonth}).`);
+}
+if (projectedCost > Number(budget.monthlyAiBudgetJpy || 300)) {
+  throw new Error(`AI monthly budget would be exceeded (¥${projectedCost}/¥${budget.monthlyAiBudgetJpy}).`);
+}
 
 function parseJsonResponse(text) {
   const start = text.indexOf('{');
@@ -25,7 +53,7 @@ function parseJsonResponse(text) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-for (const candidate of (plan.candidates || []).slice(0, maxCalls)) {
+for (const candidate of candidates) {
   const source = fs.readFileSync(candidate.targetFile, 'utf8').slice(0, 10000);
   const prompt = candidate.kind === 'title'
     ? `You are an SEO editor for a Japanese affiliate information site. Propose ONLY a page title improvement based on real Search Console evidence. Do not invent facts, rankings, experiences or guarantees. Query: ${candidate.query}\nEvidence: ${JSON.stringify(candidate.evidence)}\nCurrent source:\n${source}\nReturn JSON only: {"proposedTitle":"...","rationale":"...","confidence":0.0}`
@@ -43,9 +71,15 @@ for (const candidate of (plan.candidates || []).slice(0, maxCalls)) {
   const proposal = parseJsonResponse(String(text));
   const prohibited = (rules.prohibitedPhrases || []).filter((phrase) => JSON.stringify(proposal).includes(phrase));
   proposals.push({ ...candidate, proposal, blockedReasons: prohibited.map((x) => `prohibited phrase: ${x}`), generatedAt: new Date().toISOString(), model });
+
+  usage.calls += 1;
+  usage.estimatedCostJpy += Math.max(0, estimatedCostPerCall || 0);
+  usage.byModel[model] = (usage.byModel[model] || 0) + 1;
+  usage.updatedAt = new Date().toISOString();
+  fs.writeFileSync(usagePath, JSON.stringify(usage, null, 2));
 }
 
-const output = { generatedAt: new Date().toISOString(), model, proposals };
+const output = { generatedAt: new Date().toISOString(), model, proposals, usage: { calls: usage.calls, estimatedCostJpy: usage.estimatedCostJpy } };
 fs.mkdirSync('reports', { recursive: true });
 fs.writeFileSync('reports/ai-editor-proposal.json', JSON.stringify(output, null, 2));
-console.log(`AI editor generated ${proposals.length} proposal(s) with ${model}.`);
+console.log(`AI editor generated ${proposals.length} proposal(s) with ${model}. Monthly usage: ${usage.calls} calls, estimated ¥${usage.estimatedCostJpy}.`);
