@@ -37,6 +37,7 @@ for (const file of htmlFiles) {
   const relative = path.relative(dist, file);
   if (!html.includes('アフィリエイト広告を利用しています')) failures.push(`${relative}: disclosure is missing`);
   if (!/rel=["']canonical["']/i.test(html)) failures.push(`${relative}: canonical link is missing`);
+  if (!/rel=["']sitemap["']/i.test(html)) failures.push(`${relative}: sitemap discovery link is missing`);
   if (!/property=["']og:title["']/i.test(html)) failures.push(`${relative}: og:title is missing`);
   if (publicReady && html.includes('https://example.com')) failures.push(`${relative}: example.com remains in public build`);
   if (publicReady && /name=["']robots["'][^>]+noindex/i.test(html)) failures.push(`${relative}: public build still has noindex`);
@@ -53,6 +54,8 @@ if (fs.existsSync(path.join(dist, 'robots.txt'))) {
   const robots = fs.readFileSync(path.join(dist, 'robots.txt'), 'utf8');
   if (publicReady && !/Allow:\s*\//i.test(robots)) failures.push('robots.txt does not allow crawling in public mode');
   if (!publicReady && !/Disallow:\s*\//i.test(robots)) failures.push('robots.txt does not block crawling before public launch');
+  if (publicReady && robots.includes('example.com')) failures.push('robots.txt still references example.com in public mode');
+  if (publicReady && !/Sitemap:\s*https:\/\//i.test(robots)) failures.push('robots.txt is missing an absolute sitemap URL in public mode');
 }
 
 if (failures.length) {
