@@ -7,6 +7,9 @@ const dist = path.resolve('dist');
 const publicReady = process.env.PUBLIC_READY === 'true';
 const gaMeasurementId = String(process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
 const analyticsEnabled = /^G-[A-Z0-9]+$/i.test(gaMeasurementId);
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+let expectedSiteOrigin = null;
+try { expectedSiteOrigin = new URL(process.env.SITE_URL || '').origin; } catch {}
 const failures = [];
 
 const offerDir = path.resolve('data/offers');
@@ -112,6 +115,17 @@ if (fs.existsSync(path.join(dist, 'health.json'))) {
     const health = JSON.parse(fs.readFileSync(path.join(dist, 'health.json'), 'utf8'));
     if (health.status !== 'ok') failures.push('health.json status is not ok');
     if (Boolean(health.publicReady) !== publicReady) failures.push('health.json publicReady does not match build mode');
+    if (health.version !== pkg.version) failures.push(`health.json version '${health.version ?? '<missing>'}' does not match package.json '${pkg.version}'`);
+    if (!Number.isFinite(Date.parse(String(health.generatedAt || '')))) failures.push('health.json generatedAt is missing or invalid');
+    if (expectedSiteOrigin && health.siteOrigin !== expectedSiteOrigin) {
+      failures.push(`health.json siteOrigin '${health.siteOrigin ?? '<missing>'}' does not match SITE_URL origin '${expectedSiteOrigin}'`);
+    }
+    if (process.env.CF_PAGES_BRANCH && health.branch !== process.env.CF_PAGES_BRANCH) {
+      failures.push(`health.json branch '${health.branch ?? '<missing>'}' does not match CF_PAGES_BRANCH '${process.env.CF_PAGES_BRANCH}'`);
+    }
+    if (process.env.CF_PAGES_COMMIT_SHA && health.commitSha !== process.env.CF_PAGES_COMMIT_SHA) {
+      failures.push('health.json commitSha does not match CF_PAGES_COMMIT_SHA');
+    }
   } catch (error) {
     failures.push(`health.json is invalid JSON: ${error.message}`);
   }
@@ -128,4 +142,4 @@ if (failures.length) {
   console.error('Site smoke test failed:\n- ' + [...new Set(failures)].join('\n- '));
   process.exit(1);
 }
-console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked, affiliateCTAs=${renderedAffiliateCtas}, activeOffers=${activeOfferIds.size}, analytics=${analyticsEnabled ? 'on' : 'off'}).`);
+console.log(`Site smoke test passed (${htmlFiles.length} HTML files checked, affiliateCTAs=${renderedAffiliateCtas}, activeOffers=${activeOfferIds.size}, analytics=${analyticsEnabled ? 'on' : 'off'}, version=${pkg.version}).`);
