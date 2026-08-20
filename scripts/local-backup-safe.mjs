@@ -53,6 +53,14 @@ const sources = [
   'reports'
 ];
 
+function shouldCopyFile(source) {
+  const relative = path.relative(root, source).replace(/\\/g, '/');
+  // data/affiliate contains a tracked README. Only runtime JSON observations
+  // from that directory belong in the private backup.
+  if (relative.startsWith('data/affiliate/')) return relative.endsWith('.json');
+  return true;
+}
+
 function copyDirectory(source, destination) {
   if (!fs.existsSync(source)) return;
   const sourceStat = fs.lstatSync(source);
@@ -66,7 +74,7 @@ function copyDirectory(source, destination) {
       continue;
     }
     if (entry.isDirectory()) copyDirectory(src, dst);
-    else if (entry.isFile()) {
+    else if (entry.isFile() && shouldCopyFile(src)) {
       fs.copyFileSync(src, dst);
       try { fs.chmodSync(dst, 0o600); } catch {}
     }
