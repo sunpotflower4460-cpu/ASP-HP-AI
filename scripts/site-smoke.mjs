@@ -22,6 +22,7 @@ const htmlFiles = files.filter((file) => file.endsWith('.html'));
 if (!htmlFiles.length) failures.push('dist contains no HTML files');
 if (!fs.existsSync(path.join(dist, 'index.html'))) failures.push('dist/index.html is missing');
 if (!fs.existsSync(path.join(dist, 'robots.txt'))) failures.push('dist/robots.txt is missing');
+if (!fs.existsSync(path.join(dist, 'health.json'))) failures.push('dist/health.json is missing');
 if (!files.some((file) => /^sitemap.*\.xml$/i.test(path.basename(file)))) failures.push('sitemap XML is missing');
 
 function resolveInternalHref(href) {
@@ -56,6 +57,16 @@ if (fs.existsSync(path.join(dist, 'robots.txt'))) {
   if (!publicReady && !/Disallow:\s*\//i.test(robots)) failures.push('robots.txt does not block crawling before public launch');
   if (publicReady && robots.includes('example.com')) failures.push('robots.txt still references example.com in public mode');
   if (publicReady && !/Sitemap:\s*https:\/\//i.test(robots)) failures.push('robots.txt is missing an absolute sitemap URL in public mode');
+}
+
+if (fs.existsSync(path.join(dist, 'health.json'))) {
+  try {
+    const health = JSON.parse(fs.readFileSync(path.join(dist, 'health.json'), 'utf8'));
+    if (health.status !== 'ok') failures.push('health.json status is not ok');
+    if (Boolean(health.publicReady) !== publicReady) failures.push('health.json publicReady does not match build mode');
+  } catch (error) {
+    failures.push(`health.json is invalid JSON: ${error.message}`);
+  }
 }
 
 if (failures.length) {

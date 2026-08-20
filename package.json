@@ -1,6 +1,6 @@
 {
   "name": "asp-hp-ai",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,9 @@
     "readiness": "node scripts/readiness-check.mjs",
     "smoke": "node scripts/site-smoke.mjs",
     "build": "npm run validate && npm run freshness && astro build && npm run smoke",
+    "verify": "node scripts/verify.mjs",
+    "verify:prod": "VERIFY_PRODUCTION=true node scripts/verify.mjs",
+    "cloudflare:build": "node scripts/cloudflare-build.mjs",
     "preview": "astro preview",
     "offer:new": "node scripts/create-offer.mjs",
     "offer:check": "node scripts/offer-readiness.mjs",

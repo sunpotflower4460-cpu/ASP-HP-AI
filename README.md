@@ -12,8 +12,9 @@
 - `PUBLIC_READY=true` になるまで `noindex` + robots拒否を維持
 - AI自動編集は明示的にONにするまで提案だけで止める
 - 案件はAIが勝手にactive化しない
+- GitHub Actions/CIがなくても検証・公開できる
 
-詳しい本番設定は [SETUP.md](./SETUP.md)、実案件登録は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
+本番設定は [SETUP.md](./SETUP.md)、CIなし運用は [NO_CI.md](./NO_CI.md)、実案件登録は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
 
 ## 開始
 ```bash
@@ -22,13 +23,27 @@ npm run dev
 ```
 
 ## 品質確認
+基本はこれだけです。
 ```bash
-npm run validate
-npm run freshness
-npm run check
-npm run build
+npm run verify
 ```
-`build` はAstro生成後に内部リンク・PR表記・canonical・sitemap・robots等のSmoke Testまで実行します。
+
+本番条件まで厳格に確認:
+```bash
+PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
+```
+
+`verify` はreadiness、Astro check、content/freshness validation、build、内部リンク・PR表記・canonical・sitemap・robots・healthのSmoke Testまで実行し、結果を `reports/verification.json` に残します。
+
+## CIなしのCloudflare公開
+Cloudflare PagesをGitHubへ直接接続します。
+
+- Production branch: `main`
+- Build command: `npm run cloudflare:build`
+- Output directory: `dist`
+- Preview環境: `PUBLIC_READY=false`
+
+build gateが失敗した場合はCloudflare側で公開されません。デプロイ後は `/health.json` で実際に公開されたbranch/commitを確認できます。
 
 ## 実案件を登録
 ```bash
@@ -36,13 +51,7 @@ npm run offer:new -- --id my-offer --name "サービス名" --asp a8 --affiliate
 npm run offer:check -- my-offer
 npm run offer:activate -- my-offer --confirm-rules-reviewed
 ```
-必ずdraftから開始し、ASP/広告主条件を人間が確認した後だけ明示的にactive化します。詳細は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
-
-## 公開準備チェック
-```bash
-npm run readiness
-```
-`reports/readiness.json` に、URL・運営者情報・連絡先・active案件・Search Consoleなどの準備状態を出力します。公開前に厳格チェックしたい場合は `READINESS_STRICT=true npm run readiness` を使います。
+必ずdraftから開始し、ASP/広告主条件を人間が確認した後だけ明示的にactive化します。
 
 ## Search Console
 ```bash
@@ -57,7 +66,7 @@ npm run a8:import -- /path/to/a8-report.csv
 npm run affiliate:normalize
 npm run analyze
 ```
-既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。CSV全列は保存せず、成果分析に必要な最小データのみ残します。
+既定はShift_JISです。UTF-8の場合は `A8_CSV_ENCODING=utf-8` を指定します。
 
 ## ValueCommerce成果自動取得
 ```bash
@@ -67,12 +76,11 @@ npm run vc:fetch
 npm run affiliate:normalize
 npm run analyze
 ```
-公式注文別レポートAPI v3から、保留・承認・拒否・請求済みを取得して共通収益イベントへ正規化します。
 
 ## AI編集長（初期値は停止）
-`npm run editor:plan` はSearch Consoleと収益データから編集候補を作ります。AIを使わないので0円です。
+`npm run editor:plan` はSearch Consoleと収益データから0円で編集候補を作ります。
 
-Cloudflare Workers AIで提案を作る場合のみ:
+Cloudflare Workers AIを使う場合のみ:
 ```bash
 AI_EDITOR_ENABLED=true
 CLOUDFLARE_ACCOUNT_ID=...
@@ -80,33 +88,29 @@ CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 npm run editor:ai
 ```
-検索クエリは「信頼できない入力」として扱い、AIへの命令として実行しません。出力はJSON Schemaで制約します。
+検索クエリは信頼できない入力として扱い、出力はJSON Schemaで制約します。
 
 ### Cost Governor
-`data/budget.json` で月AI予算（初期値300円）と月間AI呼び出し上限（初期値40回）を強制します。AI呼び出しは `data/ai-usage/YYYY-MM.json` に記録されます。
+`data/budget.json` で月AI予算（初期300円）と月間AI呼び出し上限（初期40回）を強制します。
 
-- 有料/第三者モデルは `ALLOW_PAID_AI=true` がない限り拒否
-- 有料利用を許可する場合は `AI_ESTIMATED_COST_PER_CALL_JPY` も必須
-- 予測費用が月予算を超える呼び出しは実行前に停止
-- 呼び出し回数上限を超える処理も実行前に停止
+- 有料AIは `ALLOW_PAID_AI=true` がない限り拒否
+- 有料利用時は `AI_ESTIMATED_COST_PER_CALL_JPY` 必須
+- 予算/回数超過は呼び出し前に停止
 
-`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったSEOタイトル変更を自動適用します。確定収益のあるページはページID台帳によって保護され、提案後に元ページが変わっていた場合も自動適用しません。
+`EDITOR_AUTO_APPLY_TITLE=true` と `data/editor-policy.json` の `autoApply.title=true` が両方有効な場合だけ、安全条件を通ったタイトル変更を自動適用します。確定収益ページや、提案後にソースが変化したページは保護します。
 
 ## 日次パイプライン
 ```bash
 npm run daily
 ```
-GitHub Actionsの日次実行はRepository Variable `AUTOMATION_ENABLED=true` にするまで動きません。
-
-## Cloudflare Pages自動公開
-`deploy-pages.yml` はmainへのサイト影響変更で動きますが、`CLOUDFLARE_DEPLOY_ENABLED=true` にするまでdeployしません。公開前にはreadiness/buildを必ず通します。
+GitHub Actionsは補助扱いです。CIなしの日次自動運転はローカルschedulerを使う構成へ移行します。
 
 ## 安全思想
 - AIが外部情報を勝手に事実として追加しない
-- active案件の事実が期限切れならbuildを止める
+- active案件の事実が期限切れならbuild停止
 - active案件のリンク・公式情報源はHTTPSのみ
-- A8以外のASPリンクに未知の追跡パラメータを勝手に付けない
-- AIを止めても静的サイトと収益導線は動き続ける
-- 自動編集はSearch Consoleの実データがあるページだけを対象にする
-- 確定収益があるページは自動変更より保護を優先する
-- 案件分類タグは中央レジストリにある確認済み値だけを使う
+- A8以外へ未知の追跡パラメータを付けない
+- AI停止中でも静的サイトと収益導線は稼働
+- 自動編集はSearch Console実データがあるページだけ
+- 確定収益ページを自動変更より優先保護
+- 案件分類タグは中央レジストリの確認済み値だけ
