@@ -26,7 +26,7 @@ Cloudflare PagesをこのGitHubリポジトリへ直接接続します。
 Preview環境では必ず `PUBLIC_READY=false` にします。
 Production環境も最初は `PUBLIC_READY=false` のまま目視確認し、本公開時だけ `PUBLIC_READY=true` にします。
 
-Cloudflareのbuild commandが失敗するとそのデプロイは公開されません。詳細は [NO_CI.md](./NO_CI.md) を参照してください。
+Cloudflareのbuild commandが失敗するとそのデプロイは公開されません。`cloudflare:build`はself-test・tracked secret検査・readiness・Astro check・build/smokeまで実行します。詳細は [NO_CI.md](./NO_CI.md) を参照してください。
 
 公開後は:
 ```text
@@ -71,6 +71,7 @@ A8成果は公式CSVを取り込みます。日次botでは `A8_AUTO_IMPORT_FILE
 ValueCommerce案件にはProgram IDも登録します。
 
 ## 6. Google Analytics（任意・初期OFF）
+### ブラウザ側
 追加の外部クリック計測が必要な場合のみCloudflare Pagesの環境変数へ設定します。
 
 ```text
@@ -92,6 +93,38 @@ PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 を送信します。カスタムイベントへ氏名・メールアドレス等を入れない設計です。
 Privacy/外部送信ページは同じ環境変数から表示を自動切替し、矛盾時はSmoke Testでbuild停止します。
 
+### 日次分析へ取り込む
+GA4管理画面で対象Propertyの数値Property IDを確認し、設定します。
+
+```text
+GA_PROPERTY_ID=123456789
+GA_FETCH_REQUIRED=false
+```
+
+GA4 Propertyへ読み取り用サービスアカウントをViewerとして追加します。
+
+専用アカウントを使う場合:
+```text
+GA_CLIENT_EMAIL=...
+GA_PRIVATE_KEY=...
+```
+
+未設定の場合は `GSC_CLIENT_EMAIL` / `GSC_PRIVATE_KEY` を再利用します。同じサービスアカウントをSearch ConsoleとGA4双方へ必要最小限の権限で追加できます。
+
+手動確認:
+```bash
+npm run ga:fetch
+npm run analyze
+```
+
+`data/analytics/latest.json`へ直近28日分の`affiliate_click`をページ単位で保存します。カスタムディメンション登録はV1では不要です。
+
+GA4を必須観測データにしたい場合のみ:
+```text
+GA_FETCH_REQUIRED=true
+```
+にします。不完全なGA設定をstrict readinessで停止できます。
+
 ## 7. AI編集（任意）
 最初はAI編集OFFで構いません。
 
@@ -105,7 +138,7 @@ Privacy/外部送信ページは同じ環境変数から表示を自動切替し
 - `EDITOR_AUTO_APPLY_TITLE=true`
 - `data/editor-policy.json` の `autoApply.title=true`
 
-収益ページと、提案後に元ソースが変化したページは自動変更から保護されます。
+Search Console・GA4外部クリック・ASP成果からページ単位の`commercialIntentScore`を計算し、CTR改善とCTA/比較導線改善を別タスクとしてAIへ渡します。確定収益ページと、提案後に元ソースが変化したページは自動変更から保護されます。
 
 ## 8. 公開直前
 ```bash
@@ -145,3 +178,12 @@ npm run local:uninstall
 ```
 
 詳細は [LOCAL_AUTOMATION.md](./LOCAL_AUTOMATION.md) を参照してください。
+
+## 10. Secret管理
+秘密情報は `.env.local` またはCloudflare側のSecret/環境設定にのみ入れます。`.env` / `.env.local` はGitへcommitしません。
+
+```bash
+npm run security
+```
+
+`npm run verify`にも同じ検査が含まれ、trackedされたprivate key・典型的なAPI token・secret assignmentを検出した場合は公開を停止します。
