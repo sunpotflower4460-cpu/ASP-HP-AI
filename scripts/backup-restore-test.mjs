@@ -33,19 +33,34 @@ try {
   write('data/search-console/latest.json', '{"version":"original-gsc"}\n');
   write('data/analytics/latest.json', '{"version":"original-ga"}\n');
   write('data/affiliate/normalized-latest.json', '{"version":"original-affiliate"}\n');
+  write('data/affiliate/README.md', '# tracked affiliate documentation\n');
   write('data/ai-usage/2026-08.json', '{"calls":3}\n');
   write('reports/latest.json', '{"version":"original-report"}\n');
 
   const backup = run(backupScript);
   assert.equal(backup.status, 0, `backup should succeed: ${backup.stderr || backup.stdout}`);
 
+  const latestBeforeRestore = JSON.parse(fs.readFileSync(path.join(backupRoot, 'latest.json'), 'utf8'));
+  const manifestBeforeRestore = JSON.parse(fs.readFileSync(path.join(latestBeforeRestore.snapshot, 'manifest.json'), 'utf8'));
+  assert.equal(
+    manifestBeforeRestore.files.some((item) => item.path === 'data/affiliate/README.md'),
+    false,
+    'tracked affiliate documentation must never enter the private backup'
+  );
+
   write('data/search-console/latest.json', '{"version":"mutated-gsc"}\n');
   write('reports/latest.json', '{"version":"mutated-report"}\n');
+  write('data/affiliate/README.md', '# tracked affiliate documentation must survive restore\n');
 
   const restore = run(restoreScript, ['--latest', '--confirm']);
   assert.equal(restore.status, 0, `restore should succeed: ${restore.stderr || restore.stdout}`);
   assert.match(fs.readFileSync(path.join(repo, 'data/search-console/latest.json'), 'utf8'), /original-gsc/);
   assert.match(fs.readFileSync(path.join(repo, 'reports/latest.json'), 'utf8'), /original-report/);
+  assert.match(
+    fs.readFileSync(path.join(repo, 'data/affiliate/README.md'), 'utf8'),
+    /must survive restore/,
+    'tracked affiliate documentation must not be overwritten or deleted by restore'
+  );
   assert.ok(fs.existsSync(path.join(repo, 'reports/restore-report.json')), 'restore report should be written');
 
   const latest = JSON.parse(fs.readFileSync(path.join(backupRoot, 'latest.json'), 'utf8'));
