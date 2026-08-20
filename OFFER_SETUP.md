@@ -57,9 +57,12 @@ npm run offer:check -- sample-a8
 以下を機械検査します。
 
 - 実HTTPSの広告URL・公式URL
+- localhost / loopback / reserved placeholder URLでないこと
+- URLに埋め込み認証情報がないこと
 - Web媒体が許可対象として登録されていること
 - ValueCommerceのProgram ID
 - 情報源・確認日・TTL
+- 未来日のcheckedAtでないこと
 - 期限切れFactがないこと
 - decisionTagsが中央レジストリと一致すること
 - 比較画面に使えるsummaryがあること
@@ -87,12 +90,13 @@ npm run offer:activate -- sample-a8 --confirm-rules-reviewed
 Activation時には案件単体だけでなく、**サイト全体の `npm run verify`** を実行します。
 
 - deterministic self-test
+- URL safety test
 - secret / private-data scan
 - readiness
 - Astro check
 - content / freshness
 - build
-- internal link / disclosure / canonical / sitemap / robots / health / Analytics smoke test
+- internal link / disclosure / canonical / sitemap / robots / health / Analytics / rendered affiliate CTA smoke test
 
 のどこかが失敗した場合は、案件ファイルをactivation前の状態へ自動ロールバックします。
 
@@ -106,9 +110,41 @@ activeになった案件は比較ページへ自動表示されます。A8では
 npm run offer:pause -- sample-a8 --reason "campaign ended"
 ```
 
-`paused`案件はCTAが無効になります。
+`paused`案件は比較対象とCTAから外れます。
 
 pauseは安全側の操作なので、その後のfull-site verifyが別要因で失敗しても**activeへ自動で戻しません**。paused状態を維持したままエラーを出します。
+
+## 8. 日次のSafety Pause
+
+ローカル日次botは最初に:
+
+```bash
+npm run offer:safety-scan
+```
+
+を実行します。
+
+active案件が機械的な必須条件を満たさなくなった場合だけ、自動で `paused` へ移します。例:
+
+- FactのTTL切れ
+- checkedAtが未来日
+- 広告URL / 公式URL / 情報源URLが不正
+- 必須タグや媒体条件などの整合性エラー
+
+この処理は**停止専用**です。
+
+- draft → active は絶対に行わない
+- paused → active は絶対に行わない
+- Fact / URL / tagsを自動で書き換えない
+- active → paused 以外の変更は自動commit不可
+
+日次botがSafety Pauseをcommitする場合も、GitのHEADと比較して「`status / pausedAt / pauseReason`以外が一切変化していない」ことを再検証します。
+
+また、公開済みサイトではactive案件が0件になっても安全な停止デプロイは許可します。これにより、最後の案件が終了した時に**古いCTAを消すデプロイ自体がreadinessに阻止される逆転事故**を防ぎます。
+
+一方、初回公開の `npm run launch:check` では少なくとも1件のactive案件を必須にします。
+
+## 9. 再開
 
 再開する場合は、最新のASP/広告主条件・Fact・TTLをもう一度確認した上で:
 
@@ -117,10 +153,10 @@ npm run offer:check -- sample-a8
 npm run offer:activate -- sample-a8 --confirm-rules-reviewed
 ```
 
-とします。
+とします。自動再開はしません。
 
 ## 更新時
 
-料金・条件・summaryなどを変更した場合は、必ず該当Factの `source` と `checkedAt` を更新します。TTLを超えたactive案件はbuild自体が失敗するため、古い条件のまま再公開しにくい構造です。
+料金・条件・summaryなどを変更した場合は、必ず該当Factの `source` と `checkedAt` を更新します。TTLを超えたactive案件はSafety Pauseまたはbuild gateで停止されるため、古い条件のまま再公開しにくい構造です。
 
-案件URLへ `example.com` 等のプレースホルダー、HTTP URL、埋め込み認証情報を残したactive化もvalidationで拒否します。
+案件URLへ `example.com` 等のプレースホルダー、`.invalid` / `.test`、localhost、HTTP URL、埋め込み認証情報を残したactive化もvalidationで拒否します。
