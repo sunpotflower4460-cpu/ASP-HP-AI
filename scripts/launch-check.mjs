@@ -31,14 +31,16 @@ function run(name, args, extraEnv = {}) {
   }
 }
 
-// This is intentionally stricter than normal local development. Initial launch
-// requires at least one verified active offer. Ongoing production deploys do not,
-// so ended offers can always be removed safely after launch.
+// Initial launch is intentionally stricter than normal development/ongoing
+// deploys. It requires reproducible dependencies and at least one verified
+// active offer. Ongoing production deploys may safely have zero active offers
+// so an ended campaign can always be removed.
 const initialLaunchEnv = {
   READINESS_STRICT: 'true',
   REQUIRE_ACTIVE_OFFER_FOR_LAUNCH: 'true'
 };
 run('Local environment doctor', ['run', 'local:doctor']);
+run('Dependency lock reproducibility', ['run', 'lock:check']);
 run('Strict initial-launch prerequisites', ['run', 'readiness'], initialLaunchEnv);
 run('Full verification gates', ['run', 'verify'], {
   VERIFY_PRODUCTION: 'true',
