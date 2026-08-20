@@ -108,7 +108,11 @@ launchd
 
 ## 5. GitHub Actionsについて
 
-`.github/workflows/` は補助/将来用として残してありますが、V1の公開可否・品質保証・日次運転の正本ではありません。
+V1では `.github/workflows/` の自動workflowを削除済みです。
+
+- push時のCIなし
+- GitHub schedulerなし
+- GitHub Actions経由のCloudflare deployなし
 
 正本は:
 
