@@ -1,20 +1,55 @@
 # Production setup
 
-V1はコード側をほぼ無料で動かせるようにしてあります。下記だけは本人確認・外部サービス認証のため人間操作が必要です。
+V1はコード側をほぼ無料で動かせます。本人確認・ASP提携・Cloudflare/Google所有権確認など、外部サービス側で必要な操作だけ人間が行います。
 
-## 1. サイト情報
-`data/site.json` を実値に変更します。
+## 0. ローカル準備
 
-- `url`: 独自ドメインまたはPages URL
-- `operator`: 運営者表示
-- `contact`: 連絡先
+Node.js 22+ を使用します。
 
-本番用環境変数:
+```bash
+npm install
+cp .env.local.example .env.local
+```
 
-- `SITE_URL`
-- `PUBLIC_READY=false`（公開確認が終わるまでfalse）
+最初は:
+
+```text
+LOCAL_AUTOMATION_ENABLED=false
+LOCAL_AUTO_PUSH=false
+PUBLIC_READY=false
+AI_EDITOR_ENABLED=false
+EDITOR_AUTO_APPLY_TITLE=false
+```
+
+のまま進めます。
+
+## 1. サイト基本情報
+
+推奨:
+
+```bash
+npm run site:configure -- \
+  --name "サイト名" \
+  --url "https://your-domain.example" \
+  --description "サイト説明" \
+  --operator "運営者名" \
+  --contact "contact@example.jp"
+```
+
+`data/site.json`を直接編集しても構いません。
+
+必要項目:
+
+- 実HTTPS URL
+- サイト名
+- 運営者表示
+- 問い合わせ先
+- 説明文
+
+この段階では `PUBLIC_READY=false` のままです。
 
 ## 2. Cloudflare Pages（GitHub Actions不要）
+
 Cloudflare PagesをこのGitHubリポジトリへ直接接続します。
 
 - Production branch: `main`
@@ -22,168 +57,314 @@ Cloudflare PagesをこのGitHubリポジトリへ直接接続します。
 - Build command: `npm run cloudflare:build`
 - Build output directory: `dist`
 - Root directory: repository root
+- Node.js: 22+
 
-Preview環境では必ず `PUBLIC_READY=false` にします。
-Production環境も最初は `PUBLIC_READY=false` のまま目視確認し、本公開時だけ `PUBLIC_READY=true` にします。
+Preview環境:
 
-Cloudflareのbuild commandが失敗するとそのデプロイは公開されません。`cloudflare:build`はself-test・tracked secret検査・readiness・Astro check・build/smokeまで実行します。詳細は [NO_CI.md](./NO_CI.md) を参照してください。
-
-公開後は:
 ```text
-https://your-domain.example/health.json
+PUBLIC_READY=false
 ```
-でbranch/commit/publicReadyを確認できます。
 
-## 3. Search Console
-Google Search Consoleでサイト所有権を人間が確認します。その後、Search Analytics読み取りとSitemap送信に使うサービスアカウントを対象プロパティへ追加します。
+Production環境も最初は `PUBLIC_READY=false` のまま確認します。
 
-- `GSC_CLIENT_EMAIL`
-- `GSC_PRIVATE_KEY`
-- `GSC_SITE_URL`
+`cloudflare:build`はself-test、private-data/secret検査、readiness、Astro check、content/freshness、build、Smoke Testを通します。known preview branchで `PUBLIC_READY=true` は拒否されます。
 
-手動確認:
+## 3. A8.net
+
+A8でWebサイトを登録し、案件との提携を行います。案件ごとに成果条件・禁止事項・Web掲載可否を確認してください。
+
+案件登録:
+
+```bash
+npm run offer:new -- \
+  --id my-offer \
+  --name "サービス名" \
+  --asp a8 \
+  --affiliate-url "https://..." \
+  --official-url "https://..." \
+  --summary "公式情報で確認した説明" \
+  --tags "home-router"
+
+npm run offer:check -- my-offer
+npm run offer:activate -- my-offer --confirm-rules-reviewed
+```
+
+必ずdraftから開始します。AIは案件をactive化しません。
+
+A8成果は公式CSVを使用します。
+
+```bash
+npm run a8:import -- /path/to/report.csv
+npm run affiliate:normalize
+```
+
+半自動化する場合 `.env.local`:
+
+```text
+A8_AUTO_IMPORT_FILE=imports/a8-report.csv
+A8_CSV_ENCODING=shift_jis
+```
+
+規約不明な自動スクレイピングは行いません。
+
+## 4. ValueCommerce（任意）
+
+利用する場合だけ管理画面からレポートAPI認証情報を取得します。
+
+`.env.local`:
+
+```text
+VALUECOMMERCE_CLIENT_KEY=
+VALUECOMMERCE_CLIENT_SECRET=
+VALUECOMMERCE_LOOKBACK_DAYS=30
+```
+
+確認:
+
+```bash
+npm run vc:fetch
+npm run affiliate:normalize
+```
+
+## 5. Search Console
+
+Google Search Consoleでサイト所有権を人間が確認します。その後、サービスアカウントを対象プロパティへ追加します。
+
+`.env.local`:
+
+```text
+GSC_CLIENT_EMAIL=
+GSC_PRIVATE_KEY=
+GSC_SITE_URL=
+GSC_DATA_MAX_AGE_HOURS=72
+```
+
+確認:
+
 ```bash
 npm run gsc:fetch
-PUBLIC_READY=true SITE_URL=https://your-domain.example npm run gsc:submit
+npm run analyze
+npm run gap:plan
+npm run editor:plan
 ```
 
-GitHub Actionsを使わない場合、Sitemap送信は初回公開後に上記コマンドを1回実行すれば構いません。
-
-## 4. A8.net
-A8でWebサイトを登録し、案件との提携を行います。案件ごとに成果条件・禁止事項・Web掲載可否を確認します。
-
-```bash
-npm run offer:new -- ...
-npm run offer:check -- offer-id
-npm run offer:activate -- offer-id --confirm-rules-reviewed
-```
-
-詳細は [OFFER_SETUP.md](./OFFER_SETUP.md) を参照してください。
-
-A8成果は公式CSVを取り込みます。日次botでは `A8_AUTO_IMPORT_FILE` を設定すると指定CSVを自動取り込みできます。
-
-## 5. ValueCommerce（使う場合）
-管理画面からレポートAPI認証キーを発行します。
-
-- `VALUECOMMERCE_CLIENT_KEY`
-- `VALUECOMMERCE_CLIENT_SECRET`
-
-ValueCommerce案件にはProgram IDも登録します。
+`gap:plan`は既存ページ改善・カニバリ・新ページ候補を提案しますが、新規ページを自動作成しません。
 
 ## 6. Google Analytics（任意・初期OFF）
+
 ### ブラウザ側
-追加の外部クリック計測が必要な場合のみCloudflare Pagesの環境変数へ設定します。
+
+必要な場合だけCloudflare Production/Preview環境へ:
 
 ```text
 PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
-設定しない場合、Google tagは生成HTMLへ一切含まれません。
+未設定ならGoogle tagはHTMLへ出ません。
 
-有効時は:
+### Data API
 
-- 通常のGAページ計測
-- `affiliate_click`
-  - `affiliate_asp`
-  - `offer_id`
-  - `page_id`
-  - `cta_id`
-  - `position_id`
-
-を送信します。カスタムイベントへ氏名・メールアドレス等を入れない設計です。
-Privacy/外部送信ページは同じ環境変数から表示を自動切替し、矛盾時はSmoke Testでbuild停止します。
-
-### 日次分析へ取り込む
-GA4管理画面で対象Propertyの数値Property IDを確認し、設定します。
+日次分析へaffiliate outbound clickを取り込む場合:
 
 ```text
 GA_PROPERTY_ID=123456789
 GA_FETCH_REQUIRED=false
+GA_DATA_MAX_AGE_HOURS=72
 ```
 
-GA4 Propertyへ読み取り用サービスアカウントをViewerとして追加します。
+GA4 PropertyへサービスアカウントをViewerとして追加します。
 
 専用アカウントを使う場合:
+
 ```text
-GA_CLIENT_EMAIL=...
-GA_PRIVATE_KEY=...
+GA_CLIENT_EMAIL=
+GA_PRIVATE_KEY=
 ```
 
-未設定の場合は `GSC_CLIENT_EMAIL` / `GSC_PRIVATE_KEY` を再利用します。同じサービスアカウントをSearch ConsoleとGA4双方へ必要最小限の権限で追加できます。
+未設定ならSearch Console用サービスアカウントを再利用します。
 
-手動確認:
+確認:
+
 ```bash
 npm run ga:fetch
 npm run analyze
 ```
 
-`data/analytics/latest.json`へ直近28日分の`affiliate_click`をページ単位で保存します。カスタムディメンション登録はV1では不要です。
+## 7. AI編集（任意・初期OFF）
 
-GA4を必須観測データにしたい場合のみ:
+最初はAIなしで構いません。deterministic analysisだけでも動きます。
+
+利用する場合 `.env.local`:
+
 ```text
-GA_FETCH_REQUIRED=true
+AI_EDITOR_ENABLED=true
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 ```
-にします。不完全なGA設定をstrict readinessで停止できます。
 
-## 7. AI編集（任意）
-最初はAI編集OFFで構いません。
-
-使う場合のみ:
-
-- `AI_EDITOR_ENABLED=true`
-- `CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast`
-
-タイトル自動変更を使う場合はさらに:
-
-- `EDITOR_AUTO_APPLY_TITLE=true`
-- `data/editor-policy.json` の `autoApply.title=true`
-
-Search Console・GA4外部クリック・ASP成果からページ単位の`commercialIntentScore`を計算し、CTR改善とCTA/比較導線改善を別タスクとしてAIへ渡します。確定収益ページと、提案後に元ソースが変化したページは自動変更から保護されます。
-
-## 8. 公開直前
 ```bash
-PUBLIC_READY=true SITE_URL=https://your-domain.example npm run verify:prod
+npm run editor:ai
 ```
 
-Cloudflare Pagesでも `npm run cloudflare:build` が同じ品質ゲートを実行します。
+タイトル自動適用にはさらに:
 
-実サイトを確認し、広告表示・プライバシー・外部送信・問い合わせ導線を目視してから `PUBLIC_READY=true` にします。
+```text
+EDITOR_AUTO_APPLY_TITLE=true
+```
 
-## 9. 日次自動運転（CI不要）
+と `data/editor-policy.json` の `autoApply.title=true` が必要です。
+
+`data/budget.json`で月予算とcall数をハード制限します。
+
+## 8. publicリポジトリのprivate operational data
+
+このrepoはpublicです。以下はGitHubへpushしません。
+
+```text
+data/search-console/
+data/analytics/
+data/affiliate/*.json
+data/ai-usage/
+reports/
+imports/
+.env.local
+```
+
+`npm run security`でもtracked状態を検査します。
+
+### private backup（任意）
+
+`.env.local`:
+
+```text
+LOCAL_BACKUP_DIR=/Users/you/Documents/ASP-HP-AI-private-backups
+LOCAL_BACKUP_RETENTION_DAYS=30
+LOCAL_BACKUP_REQUIRED=false
+```
+
 ```bash
-cp .env.local.example .env.local
+npm run local:backup
+npm run local:backup:verify
 ```
+
+バックアップ先はGitリポジトリ外のみ許可され、SHA-256で整合性確認します。
+
+## 9. ローカル自動運転を診断
+
+`.env.local`を設定したら:
+
+```bash
+npm run local:doctor
+```
+
+主に次を確認します。
+
+- main branch / clean worktree
+- 公開URL
+- GSC / GA / VCの設定整合
+- AI設定整合
+- backup必須条件
+- backup先がrepo外かつ書込み可能か
+- Node/platform
+
+## 10. 公開前総合チェック
+
+実ドメイン・運営者情報・active案件まで揃ったら:
+
+```bash
+npm run launch:check
+```
+
+これは:
+
+```text
+local:doctor
+→ strict readiness
+→ production verification
+```
+
+を通します。
+
+`launch:check` PASS後も `PUBLIC_READY=false` のCloudflare Previewを目視確認してください。
+
+確認項目:
+
+- PR/広告表記
+- 比較/診断導線
+- ASPリンク
+- Privacy
+- 外部送信
+- 問い合わせ
+- モバイル表示
+- `/health.json`
+
+## 11. 本公開
+
+最終確認後だけCloudflare Production環境を:
+
+```text
+PUBLIC_READY=true
+SITE_URL=https://your-domain.example
+```
+
+へ変更します。
+
+Cloudflare側で再buildされ、strict gateをPASSした場合のみ公開されます。
+
+公開後、Search ConsoleへSitemapを送信:
+
+```bash
+npm run gsc:submit
+```
+
+## 12. 日次自動運転（CI不要）
 
 最初は:
+
 ```text
 LOCAL_AUTOMATION_ENABLED=true
 LOCAL_AUTO_PUSH=false
 ```
 
-手動確認:
+手動テスト:
+
 ```bash
+npm run local:doctor
 npm run local:daily
 ```
 
-問題なければ `LOCAL_AUTO_PUSH=true` に変更します。
+公開ページ変更がある場合だけlocal commitが作られます。検索/収益データはlocal-onlyです。
 
-macOSへ毎日登録:
+問題なければ:
+
+```text
+LOCAL_AUTO_PUSH=true
+```
+
+macOSへ登録:
+
 ```bash
 npm run local:install
 ```
 
+`local:install`は `.env.local` を読み、doctorがPASSしない限り登録しません。
+
 解除:
+
 ```bash
 npm run local:uninstall
 ```
 
 詳細は [LOCAL_AUTOMATION.md](./LOCAL_AUTOMATION.md) を参照してください。
 
-## 10. Secret管理
-秘密情報は `.env.local` またはCloudflare側のSecret/環境設定にのみ入れます。`.env` / `.env.local` はGitへcommitしません。
+## 13. Secret管理
+
+秘密情報は `.env.local` またはCloudflare側の環境変数/Secretにのみ入れます。
 
 ```bash
 npm run security
+npm run verify
 ```
 
-`npm run verify`にも同じ検査が含まれ、trackedされたprivate key・典型的なAPI token・secret assignmentを検出した場合は公開を停止します。
+private key、典型API token、非公開運用データがGit管理下に入っていれば検証を停止します。
